@@ -1,12 +1,14 @@
-"""多模态镜头描述（VLM）。支持 OpenAI GPT-4o / Qwen-VL API，内置 OpenCV 启发式降级。
+"""多模态镜头描述（VLM）。支持 OpenAI GPT-4o / Qwen-VL API，内置 OpenCV 启发式降级 + AI短剧/漫剧优化。
 
-对每个镜头的关键帧图片进行内容理解，输出：
-- content: 自然语言场景描述
-- camera_motion: 固定/摇镜/推拉/…… 
-- shot_scale: 远景/全景/中景/近景/特写
+对每个镜头的关键帧进行深度分析，输出：
+- content, shot_scale, camera_motion, mood, method
+- scene_type: dialogue / action / establishing / closeup / emotional / transition
+- face_count: 人脸数量
+- color_tone: warm / cool / neutral
+- emotion: 情绪标签
 
 API 需要环境变量 OPENAI_API_KEY 或 DASHSCOPE_API_KEY。
-无 API Key 时使用 OpenCV 启发式分析（基本够用）。
+无 API Key 时使用 OpenCV 启发式分析（含人脸检测 + 色调分析 + 场景分类）。
 """
 from __future__ import annotations
 
@@ -46,15 +48,12 @@ def _estimate_contrast(bgr: np.ndarray) -> str:
 
 
 def _estimate_shot_scale(bgr: np.ndarray) -> str:
-    """通过人体/人脸检测启发式推断景别——降级版基于画面复杂度。"""
+    """通过人脸检测 + 边缘密度推断景别。"""
     h, w = bgr.shape[:2]
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-
-    # 边缘密度（Canny）
     edges = cv2.Canny(gray, 50, 150)
     edge_density = edges.sum() / (h * w)
 
-    # 人脸检测（OpenCV Haar Cascades，能用的场合）
     face_cascade = cv2.CascadeClassifier(
         cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
     )
@@ -73,7 +72,6 @@ def _estimate_shot_scale(bgr: np.ndarray) -> str:
             return "中景"
         return "全景"
 
-    # 无脸时用边缘密度 + 亮度方差推断
     if edge_density < 0.02:
         return "远景" if _estimate_contrast(bgr) == "低对比" else "中景"
     if edge_density < 0.08:
@@ -84,16 +82,13 @@ def _estimate_shot_scale(bgr: np.ndarray) -> str:
 
 
 def _estimate_camera_motion(bgr: np.ndarray, prev_bgr: np.ndarray | None) -> str:
-    """通过帧间光流推算相机运动（仅在两帧都可用时）。"""
+    """通过帧间光流推算相机运动。"""
     if prev_bgr is None:
         return "固定"
-
-    import cv2
 
     prev_gray = cv2.cvtColor(prev_bgr, cv2.COLOR_BGR2GRAY)
     curr_gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
 
-    # 缩小以加速
     scale = 0.25
     pw = int(prev_gray.shape[1] * scale)
     ph = int(prev_gray.shape[0] * scale)
@@ -111,23 +106,135 @@ def _estimate_camera_motion(bgr: np.ndarray, prev_bgr: np.ndarray | None) -> str
         if magnitude < 2.0:
             return "轻微摇镜"
         if abs(dx) > abs(dy) * 2:
-            return "水平摇镜" if dx > 0 else "水平摇镜"
+            return "水平摇镜"
         if abs(dy) > abs(dx) * 2:
-            return "垂直摇镜" if dy > 0 else "垂直摇镜"
+            return "垂直摇镜"
         return "推拉" if magnitude > 3.0 else "手持/轻微抖动"
     except Exception:
         return "固定"
 
 
+# ── AI 短剧/漫剧 优化函数 ────────────────────────────────
+
+_face_cascade = None
+
+
+def _get_face_cascade():
+    """懒加载人脸检测器。"""
+    global _face_cascade
+    if _face_cascade is None:
+        _face_cascade = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+    return _face_cascade
+
+
+def _count_faces(bgr: np.ndarray) -> int:
+    """检测画面中的人脸数量。"""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    faces = _get_face_cascade().detectMultiScale(
+        gray, scaleFactor=1.15, minNeighbors=4, minSize=(40, 40)
+    )
+    return len(faces)
+
+
+def _estimate_color_tone(bgr: np.ndarray) -> str:
+    """分析冷暖色调：warm / cool / neutral + 描述。"""
+    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
+    hues = hsv[..., 0].astype(np.float32)
+    sats = hsv[..., 1].astype(np.float32)
+
+    # 排除低饱和度像素（黑白）
+    mask = sats > 30
+    if mask.sum() < bgr.size * 0.02:  # 几乎无彩色
+        return "黑白"
+
+    dominant_hue = int(np.median(hues[mask]))
+    if dominant_hue < 20 or dominant_hue > 160:
+        return "暖色调"
+    if 80 < dominant_hue < 140:
+        return "冷色调"
+    return "中性色调"
+
+
+def _classify_scene_type(
+    bgr: np.ndarray,
+    face_count: int,
+    shot_scale: str,
+    motion: str,
+) -> str:
+    """镜头类型分类：dialogue / action / establishing / closeup / emotional / transition。
+
+    短剧/漫剧专用的场景分类。
+    """
+    h, w = bgr.shape[:2]
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray, 50, 150)
+    edge_density = edges.sum() / (h * w)
+
+    # 过渡画面（纯色/极低边缘）
+    if edge_density < 0.005:
+        return "transition"
+
+    # 特写
+    if shot_scale == "特写":
+        return "closeup"
+
+    # 对话：≥2 张人脸，或 1 张中景人脸
+    if face_count >= 2:
+        return "dialogue"
+    if face_count == 1 and shot_scale in ("中景", "近景", "全景"):
+        return "dialogue"
+
+    # 动作：高边缘密度 + 推拉/手持相机
+    if edge_density > 0.12 and motion in ("推拉", "手持/轻微抖动", "水平摇镜", "垂直摇镜"):
+        return "action"
+
+    # 全景/远景 → 交代镜头
+    if shot_scale in ("远景", "全景"):
+        return "establishing"
+
+    # 高对比 + 面部/近景 → 情绪镜头
+    if shot_scale in ("近景", "特写") and _estimate_contrast(bgr) in ("高对比", "中等对比"):
+        return "emotional"
+
+    return "dialogue"  # fallback
+
+
+def _analyze_emotion(bgr: np.ndarray) -> str:
+    """基于亮度 + 色调 + 对比度分析情绪：positive / negative / neutral / tense。"""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    brightness = gray.mean()
+    contrast = gray.std()
+    tone = _estimate_color_tone(bgr)
+
+    if brightness < 50:
+        return "阴暗/紧张" if contrast > 40 else "压抑/忧郁"
+    if brightness > 180:
+        return "明朗/轻快" if tone == "暖色调" else "明亮/冷静"
+    if contrast > 60:
+        return "强烈/戏剧性" if tone == "冷色调" else "明快/生动"
+    if tone == "暖色调":
+        return "温暖/柔和"
+    if tone == "冷色调":
+        return "冷静/忧郁"
+
+    return "平静/中性"
+
+
+# ── 原 Prompt / API 函数 ─────────────────────────────
+
 def _build_prompt(sh_idx: int, bgr: np.ndarray, shot_info: dict) -> str:
-    """构建发给 VLM 的 Prompt。"""
+    """构建发给 VLM 的 Prompt（含短剧/漫剧分类）。"""
     return (
         "你是一个专业视频剪辑师和镜头分析师。请一眼描述这个镜头：\n"
         f"1. 画面内容（10字以内，如：「穿红色外套的女人在咖啡店看手机」「纯色转场画面」）\n"
         f"2. 景别（远景/全景/中景/近景/特写）\n"
         f"3. 相机运动（固定/摇镜/推拉/手持/抖动）\n"
-        f"4. 冷暖色调/氛围关键词\n\n"
-        f"请只返回 JSON 格式，字段：content, shot_scale, camera_motion, mood"
+        f"4. 冷暖色调/氛围关键词\n"
+        f"5. 镜头类型（dialogue对话/action动作/establishing交代/closeup特写/emotional情绪/transition过渡）\n"
+        f"6. 画面中有几张人脸\n\n"
+        f"请只返回 JSON 格式，字段：content, shot_scale, camera_motion, mood, scene_type, face_count"
     )
 
 
@@ -169,7 +276,7 @@ def _call_openai(bgr: np.ndarray, prompt: str, model: str = "gpt-4o") -> dict | 
                 import json
                 return json.loads(text)
             except Exception:
-                return {"content": text, "shot_scale": None, "camera_motion": None, "mood": None}
+                return {"content": text, "shot_scale": None, "camera_motion": None, "mood": None, "scene_type": None, "face_count": None}
     except Exception:
         return None
 
@@ -220,7 +327,7 @@ def _call_qwen(bgr: np.ndarray, prompt: str, model: str = "qwen-vl-max") -> dict
             try:
                 return json.loads(text)
             except Exception:
-                return {"content": text, "shot_scale": None, "camera_motion": None, "mood": None}
+                return {"content": text, "shot_scale": None, "camera_motion": None, "mood": None, "scene_type": None, "face_count": None}
     except Exception:
         return None
 
@@ -233,23 +340,19 @@ def describe_shot(
     backend: str = "auto",
     model: str = "gpt-4o",
 ) -> dict:
-    """对一个关键帧做语义描述。
-
-    Args:
-        keyframe_path: 关键帧图片路径
-        shot_index: 镜头序号（仅用于 Prompt）
-        shot_info: 镜头元信息（start/end/duration/transition）
-        prev_keyframe_path: 前一镜头关键帧（用于运动检测）
-        backend: auto → 先 OpenAI，再 Qwen，再 OpenCV 降级
-        model: 使用的模型 ID
+    """对一个关键帧做深度语义描述（含 AI 短剧/漫剧优化字段）。
 
     Returns:
-        {content, shot_scale, camera_motion, mood, method}
-        method: "openai" / "qwen" / "heuristic"
+        {content, shot_scale, camera_motion, mood, method,
+         scene_type, face_count, color_tone, emotion}
     """
     bgr = cv2.imread(str(keyframe_path))
     if bgr is None:
-        return {"content": None, "shot_scale": None, "camera_motion": None, "mood": None, "method": "error"}
+        return {
+            "content": None, "shot_scale": None, "camera_motion": None,
+            "mood": None, "method": "error",
+            "scene_type": None, "face_count": 0, "color_tone": None, "emotion": None,
+        }
 
     prev_bgr = None
     if prev_keyframe_path:
@@ -257,15 +360,18 @@ def describe_shot(
 
     prompt = _build_prompt(shot_index, bgr, shot_info or {})
 
-    # API 尝试
+    # — API 尝试 —
     if backend in ("auto", "openai"):
         result = _call_openai(bgr, prompt, model=model)
         if result:
             result["method"] = "openai"
-            # 补缺失字段
             result.setdefault("camera_motion", _estimate_camera_motion(bgr, prev_bgr))
             result.setdefault("shot_scale", _estimate_shot_scale(bgr))
             result.setdefault("mood", _estimate_brightness(bgr) + "·" + _estimate_contrast(bgr))
+            result.setdefault("scene_type", _classify_scene_type(bgr, _count_faces(bgr), result.get("shot_scale", "中景"), result.get("camera_motion", "固定")))
+            result.setdefault("face_count", _count_faces(bgr))
+            result.setdefault("color_tone", _estimate_color_tone(bgr))
+            result.setdefault("emotion", _analyze_emotion(bgr))
             return result
 
     if backend in ("auto", "qwen"):
@@ -275,31 +381,29 @@ def describe_shot(
             result.setdefault("camera_motion", _estimate_camera_motion(bgr, prev_bgr))
             result.setdefault("shot_scale", _estimate_shot_scale(bgr))
             result.setdefault("mood", _estimate_brightness(bgr) + "·" + _estimate_contrast(bgr))
+            result.setdefault("scene_type", _classify_scene_type(bgr, _count_faces(bgr), result.get("shot_scale", "中景"), result.get("camera_motion", "固定")))
+            result.setdefault("face_count", _count_faces(bgr))
+            result.setdefault("color_tone", _estimate_color_tone(bgr))
+            result.setdefault("emotion", _analyze_emotion(bgr))
             return result
 
-    # 降级：OpenCV 启发式
+    # — 降级：OpenCV 启发式（全面） —
     shot_scale = _estimate_shot_scale(bgr)
     camera_motion = _estimate_camera_motion(bgr, prev_bgr)
+    face_count = _count_faces(bgr)
+    color_tone = _estimate_color_tone(bgr)
+    scene_type = _classify_scene_type(bgr, face_count, shot_scale, camera_motion)
+    emotion = _analyze_emotion(bgr)
     mood = f"{_estimate_brightness(bgr)}·{_estimate_contrast(bgr)}"
 
-    # 用颜色直方图生成一句话描述
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
-    dominant_hue = int(np.median(hsv[..., 0]))
-    dominant_sat = int(np.median(hsv[..., 1]))
-
-    if dominant_sat < 30:
-        hue_desc = "黑白/低饱和度画面"
-    elif dominant_hue < 20 or dominant_hue > 160:
-        hue_desc = "暖色调画面"
-    elif 80 < dominant_hue < 140:
-        hue_desc = "冷色调画面"
-    else:
-        hue_desc = "中性色调画面"
-
+    # 转场画面优先
     if shot_info and shot_info.get("transition"):
         content = f"转场画面（{shot_info['transition']}）"
     else:
-        content = f"{shot_scale}·{camera_motion}·{hue_desc}"
+        # 构建语义标签：场景类型·景别·色调·运动
+        content = f"{scene_type}·{shot_scale}·{color_tone}·{camera_motion}"
+        if face_count > 0:
+            content += f"·{face_count}人脸"
 
     return {
         "content": content,
@@ -307,6 +411,10 @@ def describe_shot(
         "camera_motion": camera_motion,
         "mood": mood,
         "method": "heuristic",
+        "scene_type": scene_type,
+        "face_count": face_count,
+        "color_tone": color_tone,
+        "emotion": emotion,
     }
 
 
@@ -337,6 +445,10 @@ def describe_all(
         sh["shot_scale"] = desc.get("shot_scale")
         sh["camera_motion"] = desc.get("camera_motion")
         sh["content_method"] = desc.get("method")
+        sh["scene_type"] = desc.get("scene_type")
+        sh["face_count"] = desc.get("face_count")
+        sh["color_tone"] = desc.get("color_tone")
+        sh["emotion"] = desc.get("emotion")
 
         prev_kf = kf_path
 

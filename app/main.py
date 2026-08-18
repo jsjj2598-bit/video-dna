@@ -98,7 +98,7 @@ def serve_frame(filename: str):
 @app.post("/api/export")
 async def export_dna(dna: dict, fmt: str = "cutmark", background_tasks: BackgroundTasks | None = None):
     """接收 DNA JSON，导出指定格式并返回文件下载。"""
-    if fmt not in ("edl", "fcp7xml", "cutmark"):
+    if fmt not in ("edl", "fcp7xml", "cutmark", "srt", "all"):
         raise HTTPException(status_code=400, detail=f"不支持的导出格式: {fmt}")
 
     import tempfile
@@ -113,6 +113,9 @@ async def export_dna(dna: dict, fmt: str = "cutmark", background_tasks: Backgrou
         elif fmt == "cutmark":
             exporter.export_cutmark(dna, tmp.name)
             media_type = "application/json"
+        elif fmt == "srt":
+            exporter.export_srt(dna, tmp.name)
+            media_type = "text/plain"
 
         if background_tasks:
             background_tasks.add_task(os.unlink, tmp.name)

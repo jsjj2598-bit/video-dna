@@ -78,11 +78,37 @@ def _summarize(shots_list, audio_info: dict, beat_ratio: float, transition_count
     wc = audio_info.get("word_count", 0)
     if wc:
         parts.append(f"台词约 {wc} 字")
-    # VLM 描述状态
+    # AI 短剧/漫剧优化字段
     described = sum(1 for s in shots_list if s.get("content"))
     if described:
         method = shots_list[0].get("content_method", "heuristic")
         parts.append(f"已完成 {described} 个镜头语义描述（{method}）")
+
+    scene_types = {}
+    for s in shots_list:
+        st = s.get("scene_type")
+        if st:
+            scene_types[st] = scene_types.get(st, 0) + 1
+    if scene_types:
+        order = ["dialogue", "action", "establishing", "closeup", "emotional", "transition"]
+        seg = "、".join(
+            f"{k}×{scene_types[k]}" for k in order if k in scene_types
+        )
+        parts.append(f"镜头类型：{seg}")
+
+    face_total = sum(s.get("face_count", 0) or 0 for s in shots_list)
+    if face_total:
+        parts.append(f"出现人脸约 {face_total} 次")
+
+    emotions = {}
+    for s in shots_list:
+        em = s.get("emotion")
+        if em:
+            emotions[em] = emotions.get(em, 0) + 1
+    if emotions:
+        top = max(emotions, key=emotions.get)
+        parts.append(f"主导情绪：{top}")
+
     return "；".join(parts) + "。"
 
 

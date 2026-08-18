@@ -246,17 +246,48 @@ def export_cutmark(dna: dict, output_path: str | Path) -> dict:
     return result
 
 
+def export_srt(dna: dict, output_path: str | Path) -> str:
+    """将 speech_regions 导出为 SRT 字幕文件。"""
+    output_path = Path(output_path)
+    sr = dna.get("audio", {}).get("speech_regions", [])
+    if not sr:
+        output_path.write_text("", encoding="utf-8")
+        return str(output_path)
+
+    def _srt_ts(sec: float) -> str:
+        hh = int(sec // 3600)
+        mm = int((sec % 3600) // 60)
+        ss = int(sec % 60)
+        ms = int(round((sec - int(sec)) * 1000))
+        return f"{hh:02d}:{mm:02d}:{ss:02d},{ms:03d}"
+
+    lines = []
+    for i, seg in enumerate(sr, 1):
+        start_s = seg.get("start", 0.0)
+        end_s = seg.get("end", 0.0)
+        text = seg.get("text") or "[语音]"
+        lines.append(str(i))
+        lines.append(f"{_srt_ts(start_s)} --> {_srt_ts(end_s)}")
+        lines.append(text)
+        lines.append("")
+
+    output_path.write_text("\n".join(lines), encoding="utf-8")
+    return str(output_path)
+
+
 def export_all(dna: dict, out_dir: str | Path, fps: float = 30.0):
-    """一键导出所有格式。"""
+    """一键导出所有格式（含 SRT 字幕）。"""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     export_edl(dna, out_dir / "dna.edl", fps=fps)
     export_fcp7xml(dna, out_dir / "dna.xml", fps=fps)
     export_cutmark(dna, out_dir / "dna_cuts.json")
+    export_srt(dna, out_dir / "dna_subtitles.srt")
 
     return {
         "edl": str(out_dir / "dna.edl"),
         "fcp7xml": str(out_dir / "dna.xml"),
         "cutmark": str(out_dir / "dna_cuts.json"),
+        "srt": str(out_dir / "dna_subtitles.srt"),
     }

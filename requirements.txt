@@ -1,0 +1,6 @@
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9
+scenedetect[opencv]>=0.6.3
+librosa>=0.10.1
+numpy>=1.24

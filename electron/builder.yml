@@ -1,0 +1,48 @@
+appId: com.videodna.analyzer
+productName: Video DNA Analyzer
+copyright: Copyright © 2025 Video DNA Team
+
+directories:
+  output: dist
+  buildResources: electron
+
+files:
+  - electron/**/*
+  - package.json
+
+extraResources:
+  - from: .venv
+    to: backend/venv
+    filter:
+      - "**/*"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+  - from: app
+    to: backend/app
+  - from: requirements.txt
+    to: backend/
+  - from: scripts
+    to: backend/scripts
+
+win:
+  target:
+    - target: portable
+      arch: [x64]
+    - target: nsis
+      arch: [x64]
+  icon: electron/icon.ico
+  publish: null
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  icon: electron/icon.icns
+  publish: null
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: electron/icon.png
+  publish: null

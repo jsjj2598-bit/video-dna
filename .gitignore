@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+*.egg
+
+# Node
+node_modules/
+dist/
+
+# Data
+uploads/
+output*/
+test_data/speech*.wav
+test_data/bg.mp4
+test_data/*.wav
+test_data/tseg_*.mp4
+test_data/ab.mp4
+test_data/click.wav
+
+# Temp / Debug
+debug_*/
+*.tmp
+*.temp
+_test.jpg
+_api_result*.json
+check_*.py
+test_*.py
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Electron build
+electron/icon.ico
+electron/icon.icns
+electron/icon.png

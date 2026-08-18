@@ -1,0 +1,18 @@
+{
+  "name": "video-dna-analyzer",
+  "version": "0.2.0",
+  "description": "Video Editing Structure Reverse-Engineering Engine — Desktop App",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:win": "electron-builder --win --config electron/builder.yml",
+    "build:mac": "electron-builder --mac --config electron/builder.yml",
+    "build:linux": "electron-builder --linux --config electron/builder.yml"
+  },
+  "author": "Video DNA Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

@@ -1,0 +1,5 @@
+file 'C:\Users\27385\新建文件夹\video-dna\test_data\seg_0.mp4'
+file 'C:\Users\27385\新建文件夹\video-dna\test_data\seg_1.mp4'
+file 'C:\Users\27385\新建文件夹\video-dna\test_data\seg_2.mp4'
+file 'C:\Users\27385\新建文件夹\video-dna\test_data\seg_3.mp4'
+file 'C:\Users\27385\新建文件夹\video-dna\test_data\seg_4.mp4'

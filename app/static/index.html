@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Video DNA Analyzer</title>
+<style>
+  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --fg:#e6e8ee; --muted:#8a90a0; --accent:#5b8cff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--fg); }
+  .wrap { max-width: 960px; margin:0 auto; padding:32px 20px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13px; margin-bottom:24px; }
+  .drop { border:2px dashed var(--line); border-radius:12px; padding:40px 20px; text-align:center; cursor:pointer; transition:.15s; }
+  .drop.drag { border-color:var(--accent); background:#10131a; }
+  .drop p { margin:0 0 8px; font-size:15px; }
+  .drop small { color:var(--muted); }
+  input[type=file] { display:none; }
+  .stats { display:flex; gap:12px; flex-wrap:wrap; margin:20px 0; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 16px; }
+  .stat b { font-size:20px; display:block; }
+  .stat span { font-size:12px; color:var(--muted); }
+  h2 { font-size:15px; margin:24px 0 8px; }
+  #timeline { position:relative; height:64px; background:var(--panel); border:1px solid var(--line); border-radius:10px; margin:16px 0; overflow:hidden; }
+  .shot { position:absolute; top:0; bottom:0; border-right:1px solid #0006; display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; overflow:hidden; }
+  .beat { position:absolute; top:0; bottom:0; width:1px; background:#ffd166cc; }
+  .sfx { position:absolute; top:0; bottom:0; width:2px; background:#ff6b6b; }
+  .speech { position:absolute; bottom:0; height:6px; border-radius:3px; background:#4ecdc4aa; opacity:0.7; }
+  .legend { color:var(--muted); font-size:12px; margin:8px 0 0; }
+  pre { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; overflow:auto; font-size:12px; line-height:1.5; }
+  .shot-card { display:flex; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; align-items:flex-start; }
+  .shot-card img { width:80px; height:45px; object-fit:cover; border-radius:4px; flex-shrink:0; }
+  .shot-card .info { flex:1; }
+  .shot-card .info strong { display:block; margin-bottom:2px; }
+  .shot-card .info small { color:var(--muted); }
+  .shot-card .transcript { color:#4ecdc4; font-size:12px; margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Video DNA Analyzer</h1>
+  <div class="sub">上传视频，逆向其剪辑结构：分镜、转场、节拍卡点、音效候选（P0–P2 版）</div>
+  <div class="drop" id="drop">
+    <p>拖拽视频到这里，或点击选择文件</p>
+    <small>支持 mp4 / mov / mkv / webm</small>
+  </div>
+  <input type="file" id="file" accept="video/*">
+  <div id="result"></div>
+</div>
+<script>
+const drop = document.getElementById('drop');
+const file = document.getElementById('file');
+const result = document.getElementById('result');
+const palette = ['#5b8cff','#6c5ce7','#00b894','#e17055','#fdcb6e','#e84393','#0984e3','#00cec9'];
+
+drop.addEventListener('click', () => file.click());
+['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('drag'); }));
+['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('drag'); }));
+drop.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) upload(f); });
+file.addEventListener('change', () => { if (file.files[0]) upload(file.files[0]); });
+
+async function upload(f) {
+  result.innerHTML = '<p style="color:#8a90a0">分析中，请稍候…</p>';
+  const fd = new FormData();
+  fd.append('file', f);
+  try {
+    const res = await fetch('/api/analyze', { method:'POST', body: fd });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.statusText); }
+    render(await res.json());
+  } catch (err) {
+    result.innerHTML = '<p style="color:#e17055">分析失败：' + err.message + '</p>';
+  }
+}
+
+function render(d) {
+  const m = d.meta, a = d.audio;
+  const sr = a.speech_regions || [];
+  result.innerHTML = `
+    <div class="stats">
+      <div class="stat"><b>${m.total_shots}</b><span>镜头数</span></div>
+      <div class="stat"><b>${m.avg_shot_duration}s</b><span>平均镜头时长</span></div>
+      <div class="stat"><b>${a.tempo_bpm ?? '-'}</b><span>BPM</span></div>
+      <div class="stat"><b>${a.beat_count ?? 0}</b><span>节拍点</span></div>
+      <div class="stat"><b>${((m.beat_alignment_ratio || 0) * 100).toFixed(0)}%</b><span>卡点率</span></div>
+      <div class="stat"><b>${sr.length}</b><span>语音段落</span></div>
+    </div>
+    <h2>分镜时间轴</h2>
+    <div id="timeline"></div>
+    <div class="legend"><span style="color:#ffd166">▎</span> 节拍点　<span style="color:#ff6b6b">▎</span> 强瞬态(音效)　<span style="color:#4ecdc4">▎</span> 语音段落</div>
+    <h2>分镜卡片</h2>
+    <div id="shotCards"></div>
+    <h2>导出</h2>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
+      <button onclick="downloadExport('edl')">📋 EDL (CMX3600)</button>
+      <button onclick="downloadExport('fcp7xml')">📋 FCP7 XML</button>
+      <button onclick="downloadExport('cutmark')">📋 Cutmark JSON</button>
+    </div>
+    <h2>剪辑 DNA（JSON）</h2>
+    <pre>${JSON.stringify(d, null, 2)}</pre>`;
+
+  const tl = document.getElementById('timeline');
+  const total = m.duration || 1;
+  d.shots.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'shot';
+    el.style.left = (s.start / total * 100) + '%';
+    el.style.width = Math.max(s.duration / total * 100, 0.5) + '%';
+    el.style.background = palette[i % palette.length];
+    el.textContent = i + (s.transition ? '·' + s.transition : '');
+    tl.appendChild(el);
+  });
+  (a.beats || []).forEach(b => {
+    const el = document.createElement('div');
+    el.className = 'beat';
+    el.style.left = (b / total * 100) + '%';
+    tl.appendChild(el);
+  });
+  (a.sfx_candidates || []).forEach(sf => {
+    const el = document.createElement('div');
+    el.className = 'sfx';
+    el.style.left = (sf.time / total * 100) + '%';
+    tl.appendChild(el);
+  });
+  sr.forEach(r => {
+    const el = document.createElement('div');
+    el.className = 'speech';
+    el.style.left = (r.start / total * 100) + '%';
+    el.style.width = Math.max((r.end - r.start) / total * 100, 0.3) + '%';
+    el.title = r.text || '(语音区域)';
+    tl.appendChild(el);
+  });
+
+  const sc = document.getElementById('shotCards');
+  d.shots.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'shot-card';
+    const tpl = s.transcript
+      ? '<div class="transcript">🎤 ' + s.transcript + '</div>'
+      : '';
+    card.innerHTML =
+      '<img src="/api/frames/' + (s.keyframe || '') + '" alt="" onerror="this.style.display=\'none\'">' +
+      '<div class="info">' +
+      '<strong>镜头 ' + i + ' ' + s.duration.toFixed(1) + 's</strong>' +
+      '<small>入点 ' + s.start.toFixed(1) + 's · 转场 ' + (s.transition || '-') + ' · 卡点 ' + (s.beat_aligned ? '✓' : '✗') + '</small>' +
+      tpl +
+      '</div>';
+    sc.appendChild(card);
+  });
+
+  /* 语义描述（如有） */
+  d.shots.forEach((s, i) => {
+    if (!s.content) return;
+    const el = document.createElement('div');
+    el.style.cssText = 'padding:4px 0;font-size:12px;color:#4ecdc4;';
+    const scale = s.shot_scale ? ' [' + s.shot_scale + ']' : '';
+    const motion = s.camera_motion ? ' · ' + s.camera_motion : '';
+    el.textContent = '🎬 镜头 ' + i + '：' + s.content + scale + motion;
+    document.getElementById('result').appendChild(el);
+  });
+}
+
+async function downloadExport(fmt) {
+  try {
+    const dna = JSON.parse(document.querySelector('pre').textContent);
+    const res = await fetch('/api/export?fmt=' + fmt, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dna),
+    });
+    if (!res.ok) throw new Error(res.statusText);
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'videodna.' + fmt;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (err) {
+    alert('导出失败: ' + err.message);
+  }
+}
+</script>
+</body>
+</html>

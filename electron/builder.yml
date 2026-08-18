@@ -15,8 +15,8 @@ extraResources: []
 
 win:
   target:
-    - target: portable
-      arch: [x64]
+    - nsis
+    - portable
   publish: null
 
 mac:

@@ -1,4 +1,4 @@
-""""剪辑 DNA → EDL / FCP7XML / Cutmark JSON 导出。
+"""剪辑 DNA → EDL / FCP7XML / Cutmark JSON 导出。
 
 支持三种格式：
 - CMX3600 EDL：通用离线编辑交换格式

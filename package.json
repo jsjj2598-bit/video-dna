@@ -5,7 +5,7 @@
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
-    "build:win": "electron-builder --win --config electron/builder.yml",
+    "build:win": "electron-builder --win nsis portable --config electron/builder.yml",
     "build:mac": "electron-builder --mac --config electron/builder.yml",
     "build:linux": "electron-builder --linux --config electron/builder.yml"
   },

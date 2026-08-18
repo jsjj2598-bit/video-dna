@@ -17,17 +17,17 @@ let mainWindow = null;
 // ── Detect Python executable ──
 function findPython() {
   const candidates = [];
-  const projectRoot = __dirname;  // electron/
-  // Windows: .venv\Scripts\python.exe
+  const root = path.resolve(__dirname, '..');
   if (process.platform === 'win32') {
-    candidates.push(path.join(projectRoot, '..', '.venv', 'Scripts', 'python.exe'));
-    candidates.push(path.join(projectRoot, '..', '.venv', 'Scripts', 'python3.exe'));
-    candidates.push('python');         // system PATH fallback
+    candidates.push(path.join(root, '.venv', 'Scripts', 'python.exe'));
+    candidates.push(path.join(root, '.venv', 'Scripts', 'python3.exe'));
+    candidates.push(path.join(root, 'venv', 'Scripts', 'python.exe'));
+    candidates.push('python');
     candidates.push('python3');
   } else {
-    // macOS / Linux
-    candidates.push(path.join(projectRoot, '..', '.venv', 'bin', 'python'));
-    candidates.push(path.join(projectRoot, '..', '.venv', 'bin', 'python3'));
+    candidates.push(path.join(root, '.venv', 'bin', 'python'));
+    candidates.push(path.join(root, '.venv', 'bin', 'python3'));
+    candidates.push(path.join(root, 'venv', 'bin', 'python'));
     candidates.push('python3');
     candidates.push('python');
   }
@@ -47,18 +47,20 @@ function startBackend() {
   let pythonExe = null;
 
   for (const candidate of pythonCandidates) {
-    const fullPath = path.isAbsolute(candidate) ? candidate : candidate;
-    try {
-      if (fs.existsSync(candidate) || candidate === candidate.split(path.sep).pop()) {
-        // For simple names like 'python', just use them directly
+    if (path.isAbsolute(candidate)) {
+      if (fs.existsSync(candidate)) {
         pythonExe = candidate;
         break;
       }
-    } catch { continue; }
+    } else {
+      // Bare name like 'python' — rely on system PATH
+      pythonExe = candidate;
+      break;
+    }
   }
 
   if (!pythonExe) {
-    pythonExe = 'python'; // last resort
+    pythonExe = process.platform === 'win32' ? 'python' : 'python3';
   }
 
   console.log(`[electron] Starting backend: ${pythonExe} -m uvicorn app.main:app`);
@@ -195,16 +197,31 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  startBackend();
-
-  try {
-    await waitForBackend();
-    console.log('[electron] Backend ready');
-  } catch (err) {
-    console.error('[electron] Backend startup failed:', err.message);
-    // Still try to show the window — maybe it'll connect later
+  const fs = require('fs');
+  const pr = path.resolve(__dirname, '..');
+  const ok = fs.existsSync(path.join(pr, '.venv')) ||
+             fs.existsSync(path.join(pr, 'app', 'main.py'));
+  if (!ok) {
+    const html = `<!DOCTYPE html><html><body style="background:#1a1d23;color:#e0e2e8;font-family:system-ui;padding:40px">
+<h2 style="color:#5b8cff">Video DNA Analyzer</h2>
+<p style="color:#8a90a0">Portable mode needs Python backend running.</p>
+<hr style="border-color:#2a2f3a">
+<h3>1. Install</h3>
+<pre style="background:#22252e;padding:12px;border-radius:8px">python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt</pre>
+<h3>2. Start backend</h3>
+<pre style="background:#22252e;padding:12px;border-radius:8px">.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
+<h3>3. Refresh</h3>
+<button onclick="location.reload()" style="background:#5b8cff;border:none;color:#fff;padding:8px 20px;border-radius:6px;cursor:pointer">Refresh</button>
+<p>Or use start_desktop.cmd for one-click launch.</p>
+</body></html>`;
+    mainWindow = new BrowserWindow({width:900,height:600,title:'Setup Required',
+      webPreferences:{nodeIntegration:false,contextIsolation:true}});
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+    return;
   }
-
+  startBackend();
+  try { await waitForBackend(); } catch (e) {}
   createWindow();
 });
 

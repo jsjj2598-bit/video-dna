@@ -42,6 +42,15 @@ Thumbs.db
 Desktop.ini
 
 # Electron build
+dist/win-unpacked/
+dist/*.exe
+dist/*.blockmap
+dist/builder-*.yml
 electron/icon.ico
 electron/icon.icns
 electron/icon.png
+
+# Secrets
+.github_token
+.env
+fix_*.py

@@ -1,6 +1,4 @@
 """FastAPI 入口：视频上传 → 分析 → 返回「剪辑 DNA」JSON + 关键帧 + 导出。"""
-from __future__ import annotations
-
 import os
 import shutil
 import uuid
@@ -96,12 +94,38 @@ def serve_frame(filename: str):
 
 
 @app.post("/api/export")
-async def export_dna(dna: dict, fmt: str = "cutmark", background_tasks: BackgroundTasks | None = None):
+async def export_dna(dna: dict, fmt: str = "cutmark"):
     """接收 DNA JSON，导出指定格式并返回文件下载。"""
     if fmt not in ("edl", "fcp7xml", "cutmark", "srt", "all"):
         raise HTTPException(status_code=400, detail=f"不支持的导出格式: {fmt}")
 
     import tempfile
+    import zipfile
+
+    if fmt == "all":
+        # 导出所有格式，打包为 ZIP
+        tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+        try:
+            with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf:
+                for sub_fmt in ("edl", "fcp7xml", "cutmark", "srt"):
+                    sub_tmp = tempfile.NamedTemporaryFile(suffix=f".{sub_fmt}", delete=False)
+                    try:
+                        if sub_fmt == "edl":
+                            exporter.export_edl(dna, sub_tmp.name)
+                        elif sub_fmt == "fcp7xml":
+                            exporter.export_fcp7xml(dna, sub_tmp.name)
+                        elif sub_fmt == "cutmark":
+                            exporter.export_cutmark(dna, sub_tmp.name)
+                        elif sub_fmt == "srt":
+                            exporter.export_srt(dna, sub_tmp.name)
+                        zf.write(sub_tmp.name, f"dna.{sub_fmt}")
+                    finally:
+                        os.unlink(sub_tmp.name)
+            return FileResponse(tmp.name, media_type="application/zip", filename="dna_export.zip")
+        except Exception:
+            os.unlink(tmp.name)
+            raise
+
     tmp = tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False)
     try:
         if fmt == "edl":
@@ -116,9 +140,6 @@ async def export_dna(dna: dict, fmt: str = "cutmark", background_tasks: Backgrou
         elif fmt == "srt":
             exporter.export_srt(dna, tmp.name)
             media_type = "text/plain"
-
-        if background_tasks:
-            background_tasks.add_task(os.unlink, tmp.name)
         return FileResponse(tmp.name, media_type=media_type, filename=f"dna.{fmt}")
     except Exception:
         os.unlink(tmp.name)

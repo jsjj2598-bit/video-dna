@@ -15,7 +15,7 @@ pip install -r requirements.txt pyinstaller
 rm -f dist/backend
 pyinstaller --onefile --clean --name backend \
   --distpath dist --workpath output/pybuild --specpath output \
-  --add-data "app/static:app/static" \
+  --add-data "$(pwd)/app/static:app/static" \
   run_backend.py
 
 echo "OK -> dist/backend ($(du -h dist/backend | cut -f1))"

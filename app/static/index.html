@@ -170,12 +170,15 @@ input[type=file]{display:none;}
 .tml-shot{position:absolute;top:0;bottom:0;border-right:1px solid rgba(0,0,0,.3);display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;cursor:pointer;transition:filter .15s;}
 .tml-shot:hover{filter:brightness(1.3);}
 .tml-label{font-size:9px;font-weight:650;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:92%;}
-.tml-beat{position:absolute;top:0;bottom:0;width:1px;background:var(--orange);opacity:.7;}
-.tml-sfx{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.6;border-radius:1px;}
-.tml-speech{position:absolute;bottom:0;height:8px;border-radius:3px;background:var(--cyan);opacity:.5;}
+.tml-beat{position:absolute;top:0;bottom:0;width:1px;background:var(--orange);opacity:.7;pointer-events:none;}
+.tml-sfx{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.6;border-radius:1px;pointer-events:none;}
+.tml-speech{position:absolute;bottom:0;height:8px;border-radius:3px;background:var(--cyan);opacity:.5;pointer-events:none;}
 .tml-legend{display:flex;gap:14px;font-size:11px;color:var(--fg-2);margin-top:10px;flex-wrap:wrap;}
 .tml-legend span{display:flex;align-items:center;gap:5px;}
 .tml-legend .sw{width:10px;height:10px;border-radius:3px;display:inline-block;}
+.tml-shot.active{box-shadow:inset 0 0 0 2px #fff;z-index:5;filter:brightness(1.6);}
+.tml-playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 10px #fff;z-index:10;pointer-events:none;transition:left .1s linear;}
+.tml-time{font-size:11px;color:var(--accent-3);font-weight:650;margin-left:8px;}
 
 /* ── Scene Grid ── */
 .scene-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:10px;margin-bottom:20px;}
@@ -189,7 +192,8 @@ input[type=file]{display:none;}
 .shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:12px;margin-bottom:20px;}
 .shot-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;transition:all .2s;cursor:pointer;}
 .shot-card:hover{transform:translateY(-3px);box-shadow:0 10px 30px rgba(0,0,0,.4);border-color:var(--border-2);}
-.shot-card img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#05060a;}
+.shot-card img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#05060a;pointer-events:none;}
+.shot-card.active{border-color:#fff;box-shadow:0 0 0 2px var(--accent-3),0 10px 30px rgba(0,0,0,.5);transform:translateY(-3px);}
 .shot-body{padding:11px 13px 13px;}
 .shot-body .sn{font-size:11px;font-weight:700;color:var(--accent-3);letter-spacing:.3px;}
 .shot-body .sd{float:right;font-size:10.5px;color:var(--fg-3);}
@@ -824,7 +828,7 @@ function renderResult(d, file) {
   if (file) videoUrl = URL.createObjectURL(file);
 
   document.getElementById('resultArea').innerHTML = `
-    ${videoUrl ? `<div class="video-card"><video src="${videoUrl}" controls preload="metadata" poster="/api/frames/${shots[0]?.keyframe||''}"></video></div>` : ''}
+    ${videoUrl ? `<div class="video-card"><video id="videoEl" src="${videoUrl}" controls preload="metadata" poster="/api/frames/${shots[0]?.keyframe||''}"></video></div>` : ''}
 
     <div class="stats-row">
       <div class="stat-tile"><div class="num">${m.total_shots||0}</div><div class="lbl">🎬 镜头总数</div></div>
@@ -842,8 +846,8 @@ function renderResult(d, file) {
     ${d.summary?`<div class="summary-card"><strong>📝 摘要${d.summary_method==='llm'?' · AI 生成':''}</strong><div style="margin-top:4px;color:var(--fg-2)">${esc(d.summary)}</div></div>`:''}
 
     <div class="timeline-card">
-      <h3>⏱️ 时间轴 <small>${m.duration?m.duration.toFixed(1)+'s':''}</small></h3>
-      <div class="tml" id="tml"></div>
+      <h3>⏱️ 时间轴 <small>${m.duration?m.duration.toFixed(1)+'s':''}</small><span class="tml-time" id="tmlTime">0.0s</span></h3>
+      <div class="tml" id="tml"><div class="tml-playhead" id="tmlPlayhead" style="left:0"></div></div>
       <div class="tml-legend">
         <span><span class="sw" style="background:var(--orange)"></span> 节拍</span>
         <span><span class="sw" style="background:var(--red)"></span> 音效</span>
@@ -879,7 +883,8 @@ function renderResult(d, file) {
     el.style.width = Math.max(s.duration/total*100,0.5)+'%';
     el.style.background = palette[i%palette.length]+'80';
     el.innerHTML = '<span class="tml-label">'+i+(s.transition?'·'+s.transition:'')+'</span>';
-    el.title = '镜头 '+i+': '+s.start.toFixed(1)+'s → '+s.end.toFixed(1)+'s ('+s.duration.toFixed(1)+'s)'+(s.content?'\n'+s.content:'')+(s.transcript?'\n🎤 '+s.transcript:'');
+    el.title = '镜头 '+i+': '+s.start.toFixed(1)+'s → '+s.end.toFixed(1)+'s ('+s.duration.toFixed(1)+'s)'+(s.content?'\n'+s.content:'')+(s.transcript?'\n🎤 '+s.transcript:'')+'\n点击跳转到该镜头';
+    el.addEventListener('click', () => seekTo(shots[i].start, i));
     tml.appendChild(el);
   });
   (a.beats||[]).forEach(b => { const el = document.createElement('div'); el.className='tml-beat'; el.style.left=(b/total*100)+'%'; tml.appendChild(el); });
@@ -887,6 +892,7 @@ function renderResult(d, file) {
   sr.forEach(r => { const el = document.createElement('div'); el.className='tml-speech'; el.style.left=(r.start/total*100)+'%'; el.style.width=Math.max((r.end-r.start)/total*100,0.3)+'%'; el.title=(r.text||'语音')+' ['+r.start.toFixed(1)+'s→'+r.end.toFixed(1)+'s]'; tml.appendChild(el); });
 
   const sg = document.getElementById('shotGrid');
+  window.__lastShots = shots;
   shots.forEach((s,i) => {
     const card = document.createElement('div');
     card.className = 'shot-card';
@@ -896,6 +902,7 @@ function renderResult(d, file) {
     if (s.face_count>0) tags += '<span class="tag tag-orange">👤 ×'+s.face_count+'</span>';
     if (s.emotion) tags += '<span class="tag tag-pink">'+esc(s.emotion)+'</span>';
     if (s.color_tone) tags += '<span class="tag">🎨 '+s.color_tone+'</span>';
+    card.title = '点击跳转到该镜头 ('+s.start.toFixed(1)+'s)';
     card.innerHTML = `
       <img src="/api/frames/${s.keyframe||''}" alt="" loading="lazy" onerror="this.style.display='none'">
       <div class="shot-body">
@@ -906,6 +913,50 @@ function renderResult(d, file) {
       </div>`;
     sg.appendChild(card);
   });
+
+  // ── 时间轴 / 分镜 双向联动 ──
+  const videoEl = document.getElementById('videoEl');
+  const playhead = document.getElementById('tmlPlayhead');
+  const tmlTime = document.getElementById('tmlTime');
+  const segEls = Array.from(tml.querySelectorAll('.tml-shot'));
+  const cardEls = Array.from(sg.querySelectorAll('.shot-card'));
+  const clamp = (t) => Math.max(0, Math.min(t, m.duration || 0));
+  function setActive(i) {
+    segEls.forEach((el, idx) => el.classList.toggle('active', idx === i));
+    cardEls.forEach((el, idx) => el.classList.toggle('active', idx === i));
+  }
+  function movePlayhead(t) {
+    if (playhead) playhead.style.left = (clamp(t) / (m.duration || 1) * 100) + '%';
+    if (tmlTime) tmlTime.textContent = t.toFixed(1) + 's';
+  }
+  function seekTo(t, i) {
+    if (videoEl) { videoEl.currentTime = clamp(t); videoEl.play().catch(() => {}); }
+    setActive(i);
+    movePlayhead(t);
+    if (cardEls[i] && cardEls[i].scrollIntoView) cardEls[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }
+  segEls.forEach((el, i) => el.addEventListener('click', () => seekTo(shots[i].start, i)));
+  cardEls.forEach((el, i) => el.addEventListener('click', () => seekTo(shots[i].start, i)));
+  tml.addEventListener('click', (e) => {
+    if (e.target === tml || e.target === playhead) {
+      const rect = tml.getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (m.duration || 0);
+      const idx = shots.findIndex(s => t >= s.start && t < s.end);
+      seekTo(t, idx);
+    }
+  });
+  if (videoEl) {
+    videoEl.addEventListener('timeupdate', () => {
+      const t = videoEl.currentTime;
+      movePlayhead(t);
+      const last = shots[shots.length - 1];
+      let idx = shots.findIndex(s => t >= s.start && t < s.end);
+      if (idx === -1 && last && t >= last.end) idx = shots.length - 1;
+      if (idx >= 0) setActive(idx);
+    });
+    videoEl.addEventListener('loadedmetadata', () => movePlayhead(0));
+  }
+  movePlayhead(0);
 }
 
 // ── Export ──

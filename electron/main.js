@@ -57,9 +57,11 @@ function isBackendUp() {
 }
 
 function findBackendExe() {
+  // macOS 下 PyInstaller onefile 产物无 .exe 后缀
+  const name = process.platform === 'win32' ? 'backend.exe' : 'backend';
   const exe = app.isPackaged
-    ? path.join(process.resourcesPath, 'backend.exe')
-    : path.join(path.resolve(__dirname, '..'), 'dist', 'backend.exe');
+    ? path.join(process.resourcesPath, name)
+    : path.join(path.resolve(__dirname, '..'), 'dist', name);
   log('findBackendExe ->', exe, 'exists=' + fs.existsSync(exe), 'isPackaged=' + app.isPackaged);
   return exe;
 }

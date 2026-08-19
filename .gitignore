@@ -80,5 +80,7 @@ git_log2.txt
 # Electron build artifacts (repo root)
 app.asar
 electron/dist/
+*.dmg
+*.pkg
 
 build_log.txt

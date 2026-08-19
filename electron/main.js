@@ -35,49 +35,29 @@ function findPython() {
 }
 
 function startBackend() {
-  // Use cwd = project root (parent of electron/)
   const cwd = path.resolve(__dirname, '..');
-
+  
   // Ensure uploads dir exists
   const fs = require('fs');
   const uploadsDir = path.join(cwd, 'uploads');
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-  const pythonCandidates = findPython();
-  let pythonExe = null;
+  // 打包后，backend.exe 在 resources 目录；开发模式在 dist 目录
+  const backendExe = app.isPackaged
+    ? path.join(process.resourcesPath, 'backend.exe')
+    : path.join(cwd, 'dist', 'backend.exe');
 
-  for (const candidate of pythonCandidates) {
-    if (path.isAbsolute(candidate)) {
-      if (fs.existsSync(candidate)) {
-        pythonExe = candidate;
-        break;
-      }
-    } else {
-      // Bare name like 'python' — rely on system PATH
-      pythonExe = candidate;
-      break;
-    }
+  if (!fs.existsSync(backendExe)) {
+    console.error('Backend executable not found:', backendExe);
+    return;
   }
 
-  if (!pythonExe) {
-    pythonExe = process.platform === 'win32' ? 'python' : 'python3';
-  }
+  console.log(`[electron] Starting backend: ${backendExe}`);
 
-  console.log(`[electron] Starting backend: ${pythonExe} -m uvicorn app.main:app`);
-  
-  pythonProcess = spawn(pythonExe, [
-    '-m', 'uvicorn', 'app.main:app',
-    '--host', '127.0.0.1',
-    '--port', String(PORT),
-    '--log-level', 'warning',
-  ], {
-    cwd,
+  pythonProcess = spawn(backendExe, [], {
+    cwd: path.dirname(backendExe),
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      PYTHONIOENCODING: 'utf-8',
-      PYTHONUTF8: '1',
-    },
+    env: { ...process.env },
   });
 
   pythonProcess.stdout.on('data', (data) => {
@@ -138,7 +118,8 @@ function createWindow() {
       contextIsolation: true,
     },
   });
-
+console.log('Loading backend URL directly...');
+mainWindow.show();
   mainWindow.loadURL(BACKEND_URL);
 
   // Build native app menu
@@ -199,7 +180,11 @@ function createWindow() {
 app.whenReady().then(async () => {
   const fs = require('fs');
   const pr = path.resolve(__dirname, '..');
-  const ok = fs.existsSync(path.join(pr, '.venv')) ||
+  const backendExe = app.isPackaged
+    ? path.join(process.resourcesPath, 'backend.exe')
+    : path.join(pr, 'dist', 'backend.exe');
+  const ok = fs.existsSync(backendExe) ||
+             fs.existsSync(path.join(pr, '.venv')) ||
              fs.existsSync(path.join(pr, 'app', 'main.py'));
   if (!ok) {
     const html = `<!DOCTYPE html><html><body style="background:#1a1d23;color:#e0e2e8;font-family:system-ui;padding:40px">

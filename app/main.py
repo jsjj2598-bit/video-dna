@@ -14,7 +14,8 @@ from . import exporter
 app = FastAPI(title="Video DNA Analyzer", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],   # 允许所有来源，开发阶段可放开
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

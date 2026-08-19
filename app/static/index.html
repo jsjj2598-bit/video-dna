@@ -2,181 +2,712 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>Video DNA Analyzer</title>
 <style>
-  :root { --bg:#0f1115; --panel:#181b22; --line:#2a2f3a; --fg:#e6e8ee; --muted:#8a90a0; --accent:#5b8cff; }
-  * { box-sizing: border-box; }
-  body { margin:0; font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; background:var(--bg); color:var(--fg); }
-  .wrap { max-width: 960px; margin:0 auto; padding:32px 20px 64px; }
-  h1 { font-size:22px; margin:0 0 4px; }
-  .sub { color:var(--muted); font-size:13px; margin-bottom:24px; }
-  .drop { border:2px dashed var(--line); border-radius:12px; padding:40px 20px; text-align:center; cursor:pointer; transition:.15s; }
-  .drop.drag { border-color:var(--accent); background:#10131a; }
-  .drop p { margin:0 0 8px; font-size:15px; }
-  .drop small { color:var(--muted); }
-  input[type=file] { display:none; }
-  .stats { display:flex; gap:12px; flex-wrap:wrap; margin:20px 0; }
-  .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 16px; }
-  .stat b { font-size:20px; display:block; }
-  .stat span { font-size:12px; color:var(--muted); }
-  h2 { font-size:15px; margin:24px 0 8px; }
-  #timeline { position:relative; height:64px; background:var(--panel); border:1px solid var(--line); border-radius:10px; margin:16px 0; overflow:hidden; }
-  .shot { position:absolute; top:0; bottom:0; border-right:1px solid #0006; display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; overflow:hidden; }
-  .beat { position:absolute; top:0; bottom:0; width:1px; background:#ffd166cc; }
-  .sfx { position:absolute; top:0; bottom:0; width:2px; background:#ff6b6b; }
-  .speech { position:absolute; bottom:0; height:6px; border-radius:3px; background:#4ecdc4aa; opacity:0.7; }
-  .legend { color:var(--muted); font-size:12px; margin:8px 0 0; }
-  pre { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; overflow:auto; font-size:12px; line-height:1.5; }
-  .shot-card { display:flex; gap:12px; padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; align-items:flex-start; }
-  .shot-card img { width:80px; height:45px; object-fit:cover; border-radius:4px; flex-shrink:0; }
-  .shot-card .info { flex:1; }
-  .shot-card .info strong { display:block; margin-bottom:2px; }
-  .shot-card .info small { color:var(--muted); }
-  .shot-card .transcript { color:#4ecdc4; font-size:12px; margin-top:2px; }
+:root {
+  --bg: #0e1017;
+  --bg2: #13151e;
+  --panel: #191b26;
+  --panel2: #1f2230;
+  --border: #262a3a;
+  --border2: #32364a;
+  --fg: #e2e4ee;
+  --fg2: #8a90a0;
+  --accent: #4f7dff;
+  --accent2: #6b9aff;
+  --hover: #2a2e42;
+  --green: #44cf9c;
+  --orange: #ff9f43;
+  --red: #ff6b6b;
+  --cyan: #4ecdc4;
+  --yellow: #feca57;
+  --pink: #e84393;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --sidebar: 220px;
+  --header: 52px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Microsoft YaHei','PingFang SC','Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--fg);display:flex;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Sidebar ── */
+.sidebar{
+  width:var(--sidebar);height:100vh;background:var(--bg2);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  flex-shrink:0;user-select:none;
+}
+.sidebar-brand{
+  height:var(--header);display:flex;align-items:center;gap:10px;
+  padding:0 16px;border-bottom:1px solid var(--border);
+  font-size:15px;font-weight:700;letter-spacing:-.3px;
+}
+.sidebar-brand .logo{
+  width:28px;height:28px;border-radius:6px;background:linear-gradient(135deg,#4f7dff,#7c5cff);
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;color:#fff;flex-shrink:0;
+}
+.sidebar-nav{flex:1;overflow-y:auto;padding:8px 0;}
+.sidebar-nav .nav-item{
+  display:flex;align-items:center;gap:10px;padding:9px 16px;
+  font-size:13px;color:var(--fg2);cursor:pointer;transition:all .15s;
+  border-left:2px solid transparent;
+}
+.sidebar-nav .nav-item:hover{background:var(--panel);color:var(--fg);}
+.sidebar-nav .nav-item.active{background:var(--panel);color:var(--accent2);border-left-color:var(--accent);}
+.sidebar-nav .nav-item .icon{font-size:16px;width:20px;text-align:center;}
+.nav-section{font-size:10px;font-weight:600;color:var(--fg2);padding:16px 16px 6px;text-transform:uppercase;letter-spacing:.5px;opacity:.5;}
+.sidebar-footer{
+  padding:10px 16px;border-top:1px solid var(--border);
+  font-size:11px;color:var(--fg2);
+}
+.sidebar-footer .status-indicator{display:flex;align-items:center;gap:6px;}
+.sidebar-footer .dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+.sidebar-footer .version{color:var(--fg2);opacity:.5;margin-top:4px;}
+
+/* ── Main ── */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.header{
+  height:var(--header);display:flex;align-items:center;justify-content:space-between;
+  padding:0 20px;border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.header-left{display:flex;align-items:center;gap:12px;}
+.header-left h2{font-size:15px;font-weight:600;}
+.header-left .breadcrumb{font-size:12px;color:var(--fg2);}
+.header-actions{display:flex;align-items:center;gap:8px;}
+.header-actions button{
+  background:none;border:1px solid var(--border);color:var(--fg2);
+  padding:6px 12px;border-radius:var(--radius-sm);font-size:12px;cursor:pointer;
+  transition:all .15s;font-family:inherit;
+}
+.header-actions button:hover{background:var(--panel);color:var(--fg);border-color:var(--border2);}
+.header-actions .btn-primary{
+  background:linear-gradient(135deg,#4f7dff,#7c5cff);border:none;color:#fff;
+}
+.header-actions .btn-primary:hover{opacity:.9;}
+
+/* ── Content ── */
+.content{flex:1;overflow-y:auto;padding:20px;}
+.content-inner{max-width:1100px;margin:0 auto;}
+
+/* ── Tab Panels ── */
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* ── Drop Zone ── */
+.drop-zone{
+  border:2px dashed var(--border2);border-radius:var(--radius);
+  padding:48px 20px;text-align:center;cursor:pointer;
+  transition:all .25s;background:var(--panel);margin-bottom:20px;
+}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--accent);background:var(--panel2);}
+.drop-zone .icon{font-size:40px;display:block;margin-bottom:10px;}
+.drop-zone p{font-size:14px;font-weight:500;margin-bottom:4px;}
+.drop-zone small{color:var(--fg2);font-size:12px;}
+input[type=file]{display:none;}
+
+/* ── Stats Row ── */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px;margin-bottom:20px;}
+.stat-tile{
+  background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:14px;text-align:center;transition:all .2s;
+}
+.stat-tile:hover{border-color:var(--border2);}
+.stat-tile .num{font-size:22px;font-weight:700;background:linear-gradient(135deg,#4f7dff,#7c5cff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-tile .num.green{background:linear-gradient(135deg,#44cf9c,#4ecdc4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-tile .num.orange{background:linear-gradient(135deg,#ff9f43,#feca57);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-tile .num.pink{background:linear-gradient(135deg,#e84393,#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-tile .lbl{font-size:11px;color:var(--fg2);margin-top:2px;}
+
+/* ── Timeline ── */
+.timeline-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;}
+.timeline-card h3{font-size:13px;font-weight:600;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.timeline-card h3 small{font-weight:400;color:var(--fg2);font-size:11px;}
+.tml{position:relative;height:60px;background:var(--bg2);border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);}
+.tml-shot{position:absolute;top:0;bottom:0;border-right:1px solid rgba(0,0,0,.25);display:flex;align-items:flex-end;justify-content:center;padding-bottom:2px;cursor:pointer;transition:opacity .15s;}
+.tml-shot:hover{opacity:.8;}
+.tml-label{font-size:9px;font-weight:600;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90%;}
+.tml-beat{position:absolute;top:0;bottom:0;width:1px;background:var(--yellow);opacity:.6;}
+.tml-sfx{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.5;border-radius:1px;}
+.tml-speech{position:absolute;bottom:0;height:7px;border-radius:3px;background:var(--cyan);opacity:.45;}
+.tml-legend{display:flex;gap:12px;font-size:11px;color:var(--fg2);margin-top:8px;flex-wrap:wrap;}
+.tml-legend span{display:flex;align-items:center;gap:4px;}
+
+/* ── Section ── */
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+.section-header h3{font-size:14px;font-weight:600;}
+.section-header h3 small{font-weight:400;color:var(--fg2);font-size:11px;}
+
+/* ── Shot Grid ── */
+.shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:20px;}
+.shot-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden;transition:all .2s;cursor:pointer;}
+.shot-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.3);border-color:var(--border2);}
+.shot-card img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#0a0c12;}
+.shot-body{padding:10px 12px 12px;}
+.shot-body .sn{font-size:11px;font-weight:600;color:var(--accent2);}
+.shot-body .sd{float:right;font-size:10px;color:var(--fg2);}
+.shot-tags{display:flex;flex-wrap:wrap;gap:3px;margin-top:5px;}
+.tag{font-size:9px;padding:2px 7px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);color:var(--fg2);font-weight:500;line-height:1.4;}
+.tag-blue{border-color:#4f7dff44;color:var(--accent2);background:rgba(79,125,255,.1);}
+.tag-green{border-color:#44cf9c44;color:var(--green);background:rgba(68,207,156,.1);}
+.tag-orange{border-color:#ff9f4344;color:var(--orange);background:rgba(255,159,67,.1);}
+.tag-pink{border-color:#e8439344;color:var(--pink);background:rgba(232,67,147,.1);}
+.shot-body .transcript{font-size:10px;color:var(--cyan);margin-top:5px;line-height:1.4;max-height:2.8em;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.shot-body .desc{font-size:10px;color:var(--fg2);margin-top:3px;line-height:1.4;}
+
+/* ── Scene Grid ── */
+.scene-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:20px;}
+.scene-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;text-align:center;transition:all .2s;}
+.scene-card:hover{border-color:var(--border2);}
+.scene-card .icon{font-size:24px;display:block;margin-bottom:4px;}
+.scene-card .cnt{font-size:18px;font-weight:700;}
+.scene-card .lbl{font-size:11px;color:var(--fg2);margin-top:2px;}
+
+/* ── Export ── */
+.export-section{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;}
+.export-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
+.export-btns button{
+  padding:8px 16px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg2);color:var(--fg);font-size:12px;font-weight:500;cursor:pointer;
+  transition:all .15s;font-family:inherit;
+}
+.export-btns button:hover{background:var(--panel2);border-color:var(--border2);}
+.export-btns .primary{background:linear-gradient(135deg,#4f7dff,#7c5cff);border:none;color:#fff;}
+.export-btns .primary:hover{opacity:.9;}
+
+/* ── JSON ── */
+.json-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px;}
+pre{background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;overflow:auto;font-size:11px;line-height:1.5;max-height:320px;font-family:'Consolas','Fira Code','JetBrains Mono',monospace;}
+
+/* ── Summary ── */
+.summary-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:20px;font-size:13px;line-height:1.6;}
+.summary-card strong{color:var(--accent2);}
+
+/* ── Settings Panel ── */
+.settings-group{margin-bottom:20px;}
+.settings-group h3{font-size:13px;font-weight:600;margin-bottom:10px;color:var(--fg2);}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.setting-row:last-child{border-bottom:none;}
+.setting-row label{font-size:13px;flex:1;}
+.setting-row .hint{font-size:11px;color:var(--fg2);}
+.setting-row select,.setting-row input{padding:6px 10px;border-radius:var(--radius-sm);background:var(--bg2);border:1px solid var(--border);color:var(--fg);font-size:12px;font-family:inherit;outline:none;width:200px;}
+.setting-row select:focus,.setting-row input:focus{border-color:var(--accent);}
+
+/* ── History Panel ── */
+.history-empty{text-align:center;padding:40px;color:var(--fg2);font-size:13px;}
+.history-item{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:6px;cursor:pointer;transition:all .15s;}
+.history-item:hover{border-color:var(--border2);background:var(--panel2);}
+.history-item .hi-name{flex:1;font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.history-item .hi-time{font-size:11px;color:var(--fg2);white-space:nowrap;}
+.history-item .hi-count{font-size:11px;color:var(--accent2);margin-left:8px;}
+.history-item .hi-del{cursor:pointer;color:var(--fg2);font-size:16px;line-height:1;padding:2px;}
+.history-item .hi-del:hover{color:var(--red);}
+
+/* ── Toast ── */
+.toast-container{position:fixed;top:16px;right:16px;z-index:999;display:flex;flex-direction:column;gap:6px;pointer-events:none;}
+.toast{pointer-events:auto;padding:10px 16px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;display:flex;align-items:center;gap:8px;box-shadow:0 4px 16px rgba(0,0,0,.4);animation:ti .25s ease;max-width:340px;border:1px solid var(--border);}
+.toast.success{background:rgba(68,207,156,.12);border-color:rgba(68,207,156,.25);color:var(--green);}
+.toast.error{background:rgba(255,107,107,.12);border-color:rgba(255,107,107,.25);color:var(--red);}
+.toast.info{background:rgba(79,125,255,.12);border-color:rgba(79,125,255,.25);color:var(--accent2);}
+@keyframes ti{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
+
+/* ── Progress Overlay ── */
+.progress{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,.5);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);align-items:center;justify-content:center;}
+.progress.active{display:flex;}
+.progress-box{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:32px;max-width:380px;width:90%;text-align:center;box-shadow:0 8px 40px rgba(0,0,0,.5);}
+.spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.progress-box .p-status{font-size:14px;font-weight:600;margin-bottom:2px;}
+.progress-box .p-sub{font-size:11px;color:var(--fg2);}
+.progress-track{height:3px;background:var(--border);border-radius:2px;margin-top:16px;overflow:hidden;}
+.progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#4f7dff,#7c5cff);border-radius:2px;transition:width .3s;}
+
+/* ── Video Player ── */
+.video-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;}
+.video-card video{width:100%;display:block;max-height:400px;background:#000;}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  :root{--sidebar:0px;}
+  .sidebar{display:none;}
+  .header{padding:0 14px;}
+  .content{padding:14px;}
+  .stats-row{grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:6px;}
+  .stat-tile{padding:10px;}
+  .stat-tile .num{font-size:17px;}
+  .shot-grid{grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;}
+  .scene-grid{grid-template-columns:repeat(auto-fill,minmax(80px,1fr));}
+  .setting-row select,.setting-row input{width:120px;}
+}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h1>Video DNA Analyzer</h1>
-  <div class="sub">上传视频，逆向其剪辑结构：分镜、转场、节拍卡点、音效候选（P0–P2 版）</div>
-  <div class="drop" id="drop">
-    <p>拖拽视频到这里，或点击选择文件</p>
-    <small>支持 mp4 / mov / mkv / webm</small>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo">🧬</div>
+    <span>Video DNA</span>
   </div>
-  <input type="file" id="file" accept="video/*">
-  <div id="result"></div>
+  <div class="sidebar-nav">
+    <div class="nav-section">分析</div>
+    <div class="nav-item active" onclick="switchTab('analyze',this)">
+      <span class="icon">🎬</span> 分析视频
+    </div>
+    <div class="nav-section">数据</div>
+    <div class="nav-item" onclick="switchTab('history',this)">
+      <span class="icon">📋</span> 历史记录
+    </div>
+    <div class="nav-section">系统</div>
+    <div class="nav-item" onclick="switchTab('settings',this)">
+      <span class="icon">⚙️</span> 设置
+    </div>
+    <div class="nav-item" onclick="switchTab('about',this)">
+      <span class="icon">ℹ️</span> 关于
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="status-indicator">
+      <span class="dot"></span>
+      <span>后端运行中</span>
+    </div>
+    <div class="version">v0.2.0</div>
+  </div>
 </div>
+
+<!-- Main Area -->
+<div class="main">
+  <div class="header">
+    <div class="header-left">
+      <h2 id="pageTitle">分析视频</h2>
+      <span class="breadcrumb" id="breadcrumb">上传视频并提取剪辑 DNA</span>
+    </div>
+    <div class="header-actions">
+      <button onclick="uploadVideo()">📤 上传视频</button>
+      <button class="btn-primary" onclick="startAnalysis()" id="analyzeBtn" disabled>▶ 开始分析</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="content-inner">
+
+      <!-- ═══ Analyze Tab ═══ -->
+      <div class="tab-panel active" id="tab-analyze">
+        <div class="drop-zone" id="dropZone">
+          <span class="icon">🎬</span>
+          <p>拖拽视频到此处，或点击「上传视频」按钮</p>
+          <small>支持 mp4 / mov / mkv / webm / avi · 最大 500MB</small>
+        </div>
+        <input type="file" id="fileInput" accept="video/*">
+        <div id="resultArea"></div>
+      </div>
+
+      <!-- ═══ History Tab ═══ -->
+      <div class="tab-panel" id="tab-history">
+        <div class="section-header">
+          <h3>📋 分析历史 <small>保存在本地浏览器</small></h3>
+          <button class="header-actions button" style="padding:6px 12px;font-size:12px" onclick="clearHistory()">清空</button>
+        </div>
+        <div id="historyList"></div>
+      </div>
+
+      <!-- ═══ Settings Tab ═══ -->
+      <div class="tab-panel" id="tab-settings">
+        <div class="section-header"><h3>⚙️ 设置</h3></div>
+        <div class="settings-group">
+          <h3>分析引擎</h3>
+          <div class="setting-row">
+            <label>检测器 <span class="hint">镜头切换检测算法</span></label>
+            <select id="setDetector">
+              <option value="content">基于内容（推荐）</option>
+              <option value="adaptive">自适应</option>
+            </select>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>语义描述</h3>
+          <div class="setting-row">
+            <label>后端 <span class="hint">无 API Key 时自动使用启发式</span></label>
+            <select id="setBackend">
+              <option value="heuristic">启发式（无需 API）</option>
+              <option value="openai">OpenAI GPT-4o</option>
+              <option value="qwen">通义千问 Qwen-VL</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <label>OpenAI API Key</label>
+            <input type="password" id="setOpenAIKey" placeholder="sk-...">
+          </div>
+          <div class="setting-row">
+            <label>通义千问 API Key</label>
+            <input type="password" id="setQwenKey" placeholder="sk-...">
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>导出</h3>
+          <div class="setting-row">
+            <label>默认导出格式</label>
+            <select id="setExportFmt">
+              <option value="cutmark">Cutmark JSON</option>
+              <option value="edl">EDL (CMX3600)</option>
+              <option value="fcp7xml">FCP7 XML</option>
+              <option value="srt">SRT 字幕</option>
+              <option value="all">全部 (ZIP)</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:12px">
+          <button class="header-actions button" style="padding:8px 20px;font-size:13px;background:linear-gradient(135deg,#4f7dff,#7c5cff);border:none;color:#fff;border-radius:6px;cursor:pointer;font-family:inherit" onclick="saveSettings()">保存设置</button>
+        </div>
+      </div>
+
+      <!-- ═══ About Tab ═══ -->
+      <div class="tab-panel" id="tab-about">
+        <div style="background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:32px;text-align:center">
+          <div style="font-size:48px;margin-bottom:12px">🧬</div>
+          <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">Video DNA Analyzer</h2>
+          <p style="color:var(--fg2);font-size:14px;margin-bottom:20px">视频剪辑结构逆向分析引擎 v0.2.0</p>
+          <div style="text-align:left;max-width:400px;margin:0 auto;font-size:13px;line-height:1.8;color:var(--fg2)">
+            <p>🔬 基于 AI 的镜头结构分析工具，自动识别：</p>
+            <p>• 镜头切分与转场分类（硬切/叠化/淡入淡出/闪白）</p>
+            <p>• BPM 节拍检测与卡点率分析</p>
+            <p>• HPSS 谐波/打击乐分离 → 精准音效候选</p>
+            <p>• faster-whisper ASR 台词转写 + SRT 字幕导出</p>
+            <p>• 场景类型分类 & 情绪分析 & 人脸检测</p>
+            <p>• EDL / FCP7XML / Cutmark JSON 专业导出</p>
+            <br>
+            <p>📦 仓库：<a href="https://github.com/jsjj2598-bit/video-dna" style="color:var(--accent2)" target="_blank">github.com/jsjj2598-bit/video-dna</a></p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- Progress -->
+<div class="progress" id="progressOverlay">
+  <div class="progress-box">
+    <div class="spinner"></div>
+    <div class="p-status" id="pStatus">正在分析...</div>
+    <div class="p-sub" id="pSub">请稍候</div>
+    <div class="progress-track"><div class="progress-fill" id="pFill"></div></div>
+  </div>
+</div>
+
 <script>
-const drop = document.getElementById('drop');
-const file = document.getElementById('file');
-const result = document.getElementById('result');
-const palette = ['#5b8cff','#6c5ce7','#00b894','#e17055','#fdcb6e','#e84393','#0984e3','#00cec9'];
+// ── State ──
+let currentResult = null;
+let currentFile = null;
 
-drop.addEventListener('click', () => file.click());
-['dragover','dragenter'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.add('drag'); }));
-['dragleave','drop'].forEach(e => drop.addEventListener(e, ev => { ev.preventDefault(); drop.classList.remove('drag'); }));
-drop.addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) upload(f); });
-file.addEventListener('change', () => { if (file.files[0]) upload(file.files[0]); });
+// ── Tab Switching ──
+function switchTab(name, el) {
+  document.querySelectorAll('.tab-panel').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const titles = {analyze:'分析视频',history:'历史记录',settings:'设置',about:'关于'};
+  const breads = {analyze:'上传视频并提取剪辑 DNA',history:'查看以往分析',settings:'配置引擎和行为',about:'版本和项目信息'};
+  document.getElementById('pageTitle').textContent = titles[name] || 'Video DNA';
+  document.getElementById('breadcrumb').textContent = breads[name] || '';
+}
 
-async function upload(f) {
-  result.innerHTML = '<p style="color:#8a90a0">分析中，请稍候…</p>';
+// ── Upload ──
+document.getElementById('dropZone').addEventListener('click', () => document.getElementById('fileInput').click());
+['dragover','dragenter'].forEach(e => document.getElementById('dropZone').addEventListener(e, ev => { ev.preventDefault(); document.getElementById('dropZone').classList.add('drag'); }));
+['dragleave','drop'].forEach(e => document.getElementById('dropZone').addEventListener(e, ev => { ev.preventDefault(); document.getElementById('dropZone').classList.remove('drag'); }));
+document.getElementById('dropZone').addEventListener('drop', ev => { const f = ev.dataTransfer.files[0]; if (f) setFile(f); });
+document.getElementById('fileInput').addEventListener('change', () => { if (document.getElementById('fileInput').files[0]) setFile(document.getElementById('fileInput').files[0]); });
+
+function uploadVideo() { document.getElementById('fileInput').click(); }
+
+function setFile(f) {
+  if (!f) return;
+  currentFile = f;
+  document.querySelector('.drop-zone p').textContent = '✅ 已选择：' + f.name;
+  document.querySelector('.drop-zone small').textContent = (f.size / 1024 / 1024).toFixed(1) + ' MB';
+  document.getElementById('analyzeBtn').disabled = false;
+  toast('📎 已选择 ' + f.name, 'info');
+}
+
+function startAnalysis() {
+  if (!currentFile) { toast('❌ 请先选择视频', 'error'); return; }
+  uploadFile(currentFile);
+}
+
+// ── Progress ──
+function showP(status, sub) {
+  document.getElementById('progressOverlay').classList.add('active');
+  document.getElementById('pStatus').textContent = status || '正在分析...';
+  document.getElementById('pSub').textContent = sub || '';
+  document.getElementById('pFill').style.width = '0%';
+}
+function updateP(pct, status, sub) {
+  document.getElementById('pFill').style.width = Math.min(pct,100) + '%';
+  if (status) document.getElementById('pStatus').textContent = status;
+  if (sub) document.getElementById('pSub').textContent = sub;
+}
+function hideP() { document.getElementById('progressOverlay').classList.remove('active'); }
+
+// ── Toast ──
+function toast(msg, type='info', dur=3500) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = 'toast ' + type;
+  t.innerHTML = msg;
+  c.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(30px)'; t.style.transition='all .25s'; setTimeout(() => t.remove(), 250); }, dur);
+}
+
+// ── Settings ──
+function getSettings() { try { return JSON.parse(localStorage.getItem('vdna_settings'))||{}; } catch { return {}; } }
+function saveSettings() {
+  const s = {
+    detector: document.getElementById('setDetector').value,
+    backend: document.getElementById('setBackend').value,
+    openai_key: document.getElementById('setOpenAIKey').value,
+    qwen_key: document.getElementById('setQwenKey').value,
+    export_fmt: document.getElementById('setExportFmt').value,
+  };
+  localStorage.setItem('vdna_settings', JSON.stringify(s));
+  toast('✅ 设置已保存', 'success');
+}
+function loadSettings() {
+  const s = getSettings();
+  document.getElementById('setDetector').value = s.detector || 'content';
+  document.getElementById('setBackend').value = s.backend || 'heuristic';
+  document.getElementById('setOpenAIKey').value = s.openai_key || '';
+  document.getElementById('setQwenKey').value = s.qwen_key || '';
+  document.getElementById('setExportFmt').value = s.export_fmt || 'cutmark';
+}
+
+// ── History ──
+function getHistory() { try { return JSON.parse(localStorage.getItem('vdna_history'))||[]; } catch { return []; } }
+function addHistory(name, result) {
+  const h = getHistory();
+  h.unshift({id:Date.now(), name, time:new Date().toLocaleString('zh-CN'), total_shots:result.meta?.total_shots||0, duration:result.meta?.duration||0, bpm:result.audio?.tempo_bpm||null, summary:result.summary||''});
+  if (h.length > 30) h.length = 30;
+  localStorage.setItem('vdna_history', JSON.stringify(h));
+}
+function renderHistory() {
+  const h = getHistory();
+  const el = document.getElementById('historyList');
+  if (!h.length) { el.innerHTML = '<div class="history-empty">暂无历史记录</div>'; return; }
+  el.innerHTML = h.map(i => `
+    <div class="history-item" onclick="toast('📋 历史仅保存摘要，请重新上传分析','info')">
+      <span>🎬</span>
+      <span class="hi-name">${esc(i.name)}</span>
+      <span class="hi-count">${i.total_shots} 镜头</span>
+      <span class="hi-time">${i.time}</span>
+      <span class="hi-del" onclick="event.stopPropagation();delHistory(${i.id})">×</span>
+    </div>
+  `).join('');
+}
+function delHistory(id) {
+  let h = getHistory();
+  h = h.filter(i => i.id !== id);
+  localStorage.setItem('vdna_history', JSON.stringify(h));
+  renderHistory();
+  toast('🗑️ 已删除', 'info');
+}
+function clearHistory() {
+  localStorage.removeItem('vdna_history');
+  renderHistory();
+  toast('🗑️ 全部清空', 'info');
+}
+
+function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── Analyze ──
+async function uploadFile(f) {
+  if (!f) return;
+  document.getElementById('resultArea').innerHTML = '';
+  const maxSize = 500 * 1024 * 1024;
+  if (f.size > maxSize) { toast('❌ 文件过大，最大 500MB', 'error'); return; }
+  
+  showP('正在上传...', f.name);
+  updateP(10);
+  
   const fd = new FormData();
   fd.append('file', f);
+  const s = getSettings();
+  const params = new URLSearchParams();
+  if (s.detector) params.set('detector', s.detector);
+
   try {
-    const res = await fetch('/api/analyze', { method:'POST', body: fd });
+    updateP(15, '正在分析镜头结构...');
+    const res = await fetch('/api/analyze?'+params.toString(), { method:'POST', body:fd });
+    updateP(40, '正在分析音频与节拍...');
     if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.statusText); }
-    render(await res.json());
+    updateP(60, '正在语义描述（启发式）...');
+    const data = await res.json();
+    updateP(85, '正在生成摘要...');
+    addHistory(f.name, data);
+    updateP(100, '分析完成！');
+    setTimeout(hideP, 500);
+    currentResult = data;
+    renderResult(data, f);
+    toast('✅ 分析完成！共 ' + (data.meta?.total_shots||0) + ' 个镜头', 'success');
   } catch (err) {
-    result.innerHTML = '<p style="color:#e17055">分析失败：' + err.message + '</p>';
+    hideP();
+    toast('❌ ' + err.message, 'error');
   }
 }
 
-function render(d) {
-  const m = d.meta, a = d.audio;
+// ── Render ──
+function renderResult(d, file) {
+  const m = d.meta || {};
+  const a = d.audio || {};
+  const shots = d.shots || [];
   const sr = a.speech_regions || [];
-  result.innerHTML = `
-    <div class="stats">
-      <div class="stat"><b>${m.total_shots}</b><span>镜头数</span></div>
-      <div class="stat"><b>${m.avg_shot_duration}s</b><span>平均镜头时长</span></div>
-      <div class="stat"><b>${a.tempo_bpm ?? '-'}</b><span>BPM</span></div>
-      <div class="stat"><b>${a.beat_count ?? 0}</b><span>节拍点</span></div>
-      <div class="stat"><b>${((m.beat_alignment_ratio || 0) * 100).toFixed(0)}%</b><span>卡点率</span></div>
-      <div class="stat"><b>${sr.length}</b><span>语音段落</span></div>
-    </div>
-    <h2>分镜时间轴</h2>
-    <div id="timeline"></div>
-    <div class="legend"><span style="color:#ffd166">▎</span> 节拍点　<span style="color:#ff6b6b">▎</span> 强瞬态(音效)　<span style="color:#4ecdc4">▎</span> 语音段落</div>
-    <h2>分镜卡片</h2>
-    <div id="shotCards"></div>
-    <h2>导出</h2>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0">
-      <button onclick="downloadExport('edl')">📋 EDL (CMX3600)</button>
-      <button onclick="downloadExport('fcp7xml')">📋 FCP7 XML</button>
-      <button onclick="downloadExport('cutmark')">📋 Cutmark JSON</button>
-    </div>
-    <h2>剪辑 DNA（JSON）</h2>
-    <pre>${JSON.stringify(d, null, 2)}</pre>`;
-
-  const tl = document.getElementById('timeline');
+  const palette = ['#4f7dff','#7c5cff','#44cf9c','#ff9f43','#feca57','#e84393','#00cec9','#ff6b6b'];
   const total = m.duration || 1;
-  d.shots.forEach((s, i) => {
-    const el = document.createElement('div');
-    el.className = 'shot';
-    el.style.left = (s.start / total * 100) + '%';
-    el.style.width = Math.max(s.duration / total * 100, 0.5) + '%';
-    el.style.background = palette[i % palette.length];
-    el.textContent = i + (s.transition ? '·' + s.transition : '');
-    tl.appendChild(el);
+
+  // Scene stats
+  const sceneTypes = {}; let faceTotal=0, emotions={}, described=0;
+  shots.forEach(s => {
+    if (s.scene_type) sceneTypes[s.scene_type] = (sceneTypes[s.scene_type]||0)+1;
+    faceTotal += s.face_count||0;
+    if (s.emotion) emotions[s.emotion] = (emotions[s.emotion]||0)+1;
+    if (s.content) described++;
   });
-  (a.beats || []).forEach(b => {
-    const el = document.createElement('div');
-    el.className = 'beat';
-    el.style.left = (b / total * 100) + '%';
-    tl.appendChild(el);
-  });
-  (a.sfx_candidates || []).forEach(sf => {
-    const el = document.createElement('div');
-    el.className = 'sfx';
-    el.style.left = (sf.time / total * 100) + '%';
-    tl.appendChild(el);
-  });
-  sr.forEach(r => {
-    const el = document.createElement('div');
-    el.className = 'speech';
-    el.style.left = (r.start / total * 100) + '%';
-    el.style.width = Math.max((r.end - r.start) / total * 100, 0.3) + '%';
-    el.title = r.text || '(语音区域)';
-    tl.appendChild(el);
+  const sceneLabels = {dialogue:'对话',action:'动作',establishing:'交代',closeup:'特写',emotional:'情绪',transition:'过渡'};
+  const sceneIcons = {dialogue:'💬',action:'💥',establishing:'🌄',closeup:'🔍',emotional:'❤️',transition:'🌀'};
+  let topEmotion = '';
+  if (Object.keys(emotions).length) topEmotion = Object.entries(emotions).sort((a,b)=>b[1]-a[1])[0][0];
+
+  // Scene HTML
+  let sceneHtml = '';
+  ['dialogue','action','establishing','closeup','emotional','transition'].forEach(st => {
+    if (sceneTypes[st]) sceneHtml += `<div class="scene-card"><span class="icon">${sceneIcons[st]||'🎬'}</span><div class="cnt">${sceneTypes[st]}</div><div class="lbl">${sceneLabels[st]||st}</div></div>`;
   });
 
-  const sc = document.getElementById('shotCards');
-  d.shots.forEach((s, i) => {
+  // Video URL
+  let videoUrl = '';
+  if (file) videoUrl = URL.createObjectURL(file);
+
+  document.getElementById('resultArea').innerHTML = `
+    ${videoUrl ? `<div class="video-card"><video src="${videoUrl}" controls preload="metadata" poster="/api/frames/${shots[0]?.keyframe||''}"></video></div>` : ''}
+
+    <div class="stats-row">
+      <div class="stat-tile"><div class="num">${m.total_shots||0}</div><div class="lbl">🎬 镜头总数</div></div>
+      <div class="stat-tile"><div class="num green">${m.avg_shot_duration?(m.avg_shot_duration).toFixed(2)+'s':'-'}</div><div class="lbl">📏 平均时长</div></div>
+      <div class="stat-tile"><div class="num orange">${a.tempo_bpm??'-'}</div><div class="lbl">🎵 BPM</div></div>
+      <div class="stat-tile"><div class="num">${a.beat_count||0}</div><div class="lbl">🥁 节拍点</div></div>
+      <div class="stat-tile"><div class="num pink">${((m.beat_alignment_ratio||0)*100).toFixed(0)}%</div><div class="lbl">🎯 卡点率</div></div>
+      <div class="stat-tile"><div class="num green">${sr.length}</div><div class="lbl">🎤 语音段落</div></div>
+      <div class="stat-tile"><div class="num ${faceTotal>0?'orange':''}">${faceTotal||0}</div><div class="lbl">👤 人脸</div></div>
+      ${topEmotion?`<div class="stat-tile"><div class="num pink" style="font-size:16px">${esc(topEmotion)}</div><div class="lbl">💭 主导情绪</div></div>`:''}
+    </div>
+
+    ${sceneHtml?`<div class="scene-grid">${sceneHtml}</div>`:''}
+
+    ${d.summary?`<div class="summary-card"><strong>📝 摘要</strong><div style="margin-top:4px;color:var(--fg2)">${esc(d.summary)}</div></div>`:''}
+
+    <div class="timeline-card">
+      <h3>⏱️ 时间轴 <small>${m.duration?m.duration.toFixed(1)+'s':''}</small></h3>
+      <div class="tml" id="tml"></div>
+      <div class="tml-legend">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--yellow);border-radius:2px"></span> 节拍</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--red);border-radius:2px"></span> 音效</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--cyan);border-radius:2px"></span> 语音</span>
+      </div>
+    </div>
+
+    <div class="section-header"><h3>🎞️ 分镜 <small>${shots.length} 个镜头</small></h3></div>
+    <div class="shot-grid" id="shotGrid"></div>
+
+    <div class="export-section">
+      <div style="font-size:13px;font-weight:600">📥 导出</div>
+      <div class="export-btns">
+        <button onclick="dlExp('edl')">📋 EDL</button>
+        <button onclick="dlExp('fcp7xml')">📋 FCP7 XML</button>
+        <button onclick="dlExp('cutmark')">📋 Cutmark</button>
+        <button onclick="dlExp('srt')">📜 SRT</button>
+        <button class="primary" onclick="dlExp('all')">📦 全部 ZIP</button>
+      </div>
+    </div>
+
+    <div class="json-card">
+      <div class="section-header"><h3>📄 剪辑 DNA <small>完整 JSON</small></h3><button style="padding:5px 12px;border-radius:4px;border:1px solid var(--border);background:var(--bg2);color:var(--fg);font-size:11px;cursor:pointer;font-family:inherit" onclick="copyJson()">📋 复制</button></div>
+      <pre id="jsonPre">${JSON.stringify(d,null,2)}</pre>
+    </div>
+  `;
+
+  // Build timeline
+  const tml = document.getElementById('tml');
+  shots.forEach((s,i) => {
+    const el = document.createElement('div');
+    el.className = 'tml-shot';
+    el.style.left = (s.start/total*100)+'%';
+    el.style.width = Math.max(s.duration/total*100,0.5)+'%';
+    el.style.background = palette[i%palette.length]+'80';
+    el.innerHTML = '<span class="tml-label">'+i+(s.transition?'·'+s.transition:'')+'</span>';
+    el.title = '镜头 '+i+': '+s.start.toFixed(1)+'s → '+s.end.toFixed(1)+'s ('+s.duration.toFixed(1)+'s)'+(s.content?'\n'+s.content:'')+(s.transcript?'\n🎤 '+s.transcript:'');
+    tml.appendChild(el);
+  });
+  (a.beats||[]).forEach(b => { const el = document.createElement('div'); el.className='tml-beat'; el.style.left=(b/total*100)+'%'; tml.appendChild(el); });
+  (a.sfx_candidates||[]).forEach(sf => { const el = document.createElement('div'); el.className='tml-sfx'; el.style.left=(sf.time/total*100)+'%'; el.title='音效: '+sf.time.toFixed(2)+'s'; tml.appendChild(el); });
+  sr.forEach(r => { const el = document.createElement('div'); el.className='tml-speech'; el.style.left=(r.start/total*100)+'%'; el.style.width=Math.max((r.end-r.start)/total*100,0.3)+'%'; el.title=(r.text||'语音')+' ['+r.start.toFixed(1)+'s→'+r.end.toFixed(1)+'s]'; tml.appendChild(el); });
+
+  // Shot grid
+  const sg = document.getElementById('shotGrid');
+  shots.forEach((s,i) => {
     const card = document.createElement('div');
     card.className = 'shot-card';
-    const tpl = s.transcript
-      ? '<div class="transcript">🎤 ' + s.transcript + '</div>'
-      : '';
-    card.innerHTML =
-      '<img src="/api/frames/' + (s.keyframe || '') + '" alt="" onerror="this.style.display=\'none\'">' +
-      '<div class="info">' +
-      '<strong>镜头 ' + i + ' ' + s.duration.toFixed(1) + 's</strong>' +
-      '<small>入点 ' + s.start.toFixed(1) + 's · 转场 ' + (s.transition || '-') + ' · 卡点 ' + (s.beat_aligned ? '✓' : '✗') + '</small>' +
-      tpl +
-      '</div>';
-    sc.appendChild(card);
-  });
-
-  /* 语义描述（如有） */
-  d.shots.forEach((s, i) => {
-    if (!s.content) return;
-    const el = document.createElement('div');
-    el.style.cssText = 'padding:4px 0;font-size:12px;color:#4ecdc4;';
-    const scale = s.shot_scale ? ' [' + s.shot_scale + ']' : '';
-    const motion = s.camera_motion ? ' · ' + s.camera_motion : '';
-    el.textContent = '🎬 镜头 ' + i + '：' + s.content + scale + motion;
-    document.getElementById('result').appendChild(el);
+    let tags = '<span class="tag">'+(s.transition||'硬切')+'</span>';
+    if (s.beat_aligned) tags += '<span class="tag tag-green">🎯 卡点</span>';
+    if (s.scene_type) tags += '<span class="tag tag-blue">'+(sceneLabels[s.scene_type]||s.scene_type)+'</span>';
+    if (s.face_count>0) tags += '<span class="tag tag-orange">👤 ×'+s.face_count+'</span>';
+    if (s.emotion) tags += '<span class="tag tag-pink">'+esc(s.emotion)+'</span>';
+    if (s.color_tone) tags += '<span class="tag">🎨 '+s.color_tone+'</span>';
+    card.innerHTML = `
+      <img src="/api/frames/${s.keyframe||''}" alt="" loading="lazy" onerror="this.style.display='none'">
+      <div class="shot-body">
+        <div><span class="sn">镜头 ${i}</span><span class="sd">${s.duration.toFixed(1)}s</span></div>
+        <div class="shot-tags">${tags}</div>
+        ${s.transcript?'<div class="transcript">🎤 '+esc(s.transcript)+'</div>':''}
+        ${s.content?'<div class="desc">'+esc(s.content)+(s.shot_scale?' ['+s.shot_scale+']':'')+(s.camera_motion?' · '+s.camera_motion:'')+'</div>':''}
+      </div>`;
+    sg.appendChild(card);
   });
 }
 
-async function downloadExport(fmt) {
+// ── Export ──
+async function dlExp(fmt) {
+  if (!currentResult) { toast('❌ 无分析结果', 'error'); return; }
   try {
-    const dna = JSON.parse(document.querySelector('pre').textContent);
-    const res = await fetch('/api/export?fmt=' + fmt, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(dna),
-    });
+    const res = await fetch('/api/export?fmt='+fmt, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(currentResult) });
     if (!res.ok) throw new Error(res.statusText);
+    const names = {edl:'videodna.edl',fcp7xml:'videodna.xml',cutmark:'videodna_cuts.json',srt:'videodna_subtitles.srt',all:'videodna_export.zip'};
     const blob = await res.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'videodna.' + fmt;
+    a.download = names[fmt]||'videodna.'+fmt;
     a.click();
     URL.revokeObjectURL(a.href);
-  } catch (err) {
-    alert('导出失败: ' + err.message);
-  }
+    toast('✅ 已导出 '+(names[fmt]||fmt), 'success');
+  } catch(err) { toast('❌ 导出失败: '+err.message, 'error'); }
 }
+
+// ── Copy JSON ──
+function copyJson() {
+  const pre = document.getElementById('jsonPre');
+  if (!pre) return;
+  navigator.clipboard.writeText(pre.textContent).then(() => toast('📋 已复制', 'success')).catch(() => toast('📋 复制失败', 'error'));
+}
+
+// ── Init ──
+loadSettings();
+renderHistory();
 </script>
 </body>
 </html>

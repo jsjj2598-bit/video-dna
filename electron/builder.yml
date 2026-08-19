@@ -3,21 +3,23 @@ productName: "Video DNA Analyzer"
 copyright: Copyright © 2025 Video DNA Team
 
 directories:
-  output: dist
-  buildResources: electron
+  app: electron          # 应用目录指向 electron 子文件夹
+  output: dist           # 输出目录（相对于项目根目录，即 D:\video-dna\dist）
+  buildResources: electron   # 构建资源目录（图标等）
 
 files:
-  - electron/**/*
-  - package.json
-  - "!node_modules/**/*"
+  - "**/*"               # 包含 electron 目录下所有文件（包括 node_modules）
+  - "!**/*.map"          # 排除 sourcemap（可选）
 
-extraResources: []
-
+extraResources:
+  - from: dist/backend.exe
+    to: backend.exe
 win:
   target:
     - nsis
     - portable
   publish: null
+  signAndEditExecutable: false
 
 mac:
   target:

@@ -54,3 +54,13 @@ electron/icon.png
 .github_token
 .env
 fix_*.py
+# Build artifacts
+backend.spec
+backend_entry.py
+build/
+
+# Temp scripts
+do_git.py
+fix_*.py
+clean_git.py
+build/

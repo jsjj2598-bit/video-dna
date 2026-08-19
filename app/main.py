@@ -9,8 +9,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
 from .analyzer import pipeline
+from .analyzer import ffmpeg_utils
 from . import exporter
 from . import registry
+from . import draft as draft_export
 
 app = FastAPI(title="Video DNA Analyzer", version="0.2.0")
 app.add_middleware(
@@ -35,6 +37,78 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 _last_session_id: str | None = None
 # 最近一次分析结果（供技能运行）
 _last_dna: dict | None = None
+# 最近一次套用模板后保留的源视频（供剪映草稿导出）
+_last_source_video: str | None = None
+
+
+def _build_cut_plan(template_dna: dict, target_dna: dict) -> dict:
+    """把示例视频的镜头节奏映射到目标视频：
+    镜头边界按时长比例缩放，并吸附到目标视频最近节拍（容差 0.45s）。
+    """
+    t_shots = sorted(template_dna.get("shots") or [], key=lambda s: s["start"])
+    t_dur = float(template_dna.get("meta", {}).get("duration") or 1.0)
+    if t_shots:
+        t_dur = max(t_dur, t_shots[-1].get("end") or t_dur)
+    if t_dur <= 0:
+        t_dur = 1.0
+
+    target_dur = float(target_dna.get("meta", {}).get("duration") or 0.0)
+    if target_dur <= 0:
+        raise HTTPException(status_code=422, detail="目标视频时长无效")
+
+    beats = sorted(target_dna.get("audio", {}).get("beats") or [])
+
+    # 模板内部镜头边界（按比例）→ 目标时间码
+    raw_bounds = [0.0]
+    for s in t_shots[:-1]:
+        frac = max(min(float(s.get("end", s["start"])) / t_dur, 1.0), 0.0)
+        raw_bounds.append(frac)
+    raw_bounds.append(1.0)
+
+    cuts = []
+    prev = 0.0
+    for k, frac in enumerate(raw_bounds):
+        raw = frac * target_dur
+        if k == 0:
+            t = 0.0
+            aligned = False
+        elif k == len(raw_bounds) - 1:
+            t = target_dur
+            aligned = False
+        else:
+            t = raw
+            aligned = False
+            # 内部边界吸附到最近节拍
+            if beats:
+                near = min(beats, key=lambda b: abs(b - raw))
+                if abs(near - raw) <= 0.45 and near > prev + 0.2:
+                    t = near
+                    aligned = True
+            t = max(t, prev + 0.3)
+        cuts.append({
+            "index": len(cuts),
+            "start": round(prev, 3),
+            "end": round(t, 3),
+            "duration": round(t - prev, 3),
+            "aligned_to_beat": aligned,
+            "template_ratio": round(frac, 4),
+        })
+        prev = t
+
+    cuts = [c for c in cuts if c["duration"] >= 0.25]
+    # 确保末尾闭合
+    if cuts and abs(cuts[-1]["end"] - target_dur) > 0.01:
+        cuts[-1]["end"] = round(target_dur, 3)
+        cuts[-1]["duration"] = round(cuts[-1]["end"] - cuts[-1]["start"], 3)
+
+    return {
+        "source": template_dna.get("meta", {}).get("source_file") or "示例视频",
+        "template_duration": round(t_dur, 3),
+        "target_duration": round(target_dur, 3),
+        "cuts": cuts,
+        "total": len(cuts),
+        "beat_aligned_count": sum(1 for c in cuts if c["aligned_to_beat"]),
+    }
 
 
 @app.get("/health")
@@ -170,6 +244,105 @@ async def export_dna(dna: dict, fmt: str = "cutmark"):
             exporter.export_srt(dna, tmp.name)
             media_type = "text/plain"
         return FileResponse(tmp.name, media_type=media_type, filename=f"dna.{fmt}")
+    except Exception:
+        os.unlink(tmp.name)
+        raise
+
+
+@app.post("/api/template/apply")
+async def apply_template(
+    file: UploadFile = File(...),
+    template: str = Form(...),
+    detector: str = "content",
+    backend: str = "auto",
+):
+    """套用示例视频分析结果：上传自己的视频 → 按模板节奏生成剪辑方案。
+
+    template 为示例视频的 DNA JSON 字符串。返回：目标视频分析 + 剪辑方案。
+    源视频保留在 uploads 目录，供 /api/draft/export 生成剪映草稿。
+    """
+    global _last_session_id, _last_dna, _last_source_video
+
+    import json as _json
+
+    try:
+        template_dna = _json.loads(template)
+        if not isinstance(template_dna, dict) or not template_dna.get("shots"):
+            raise ValueError("模板数据无效")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"模板 JSON 无效: {exc}") from exc
+
+    session_id = uuid.uuid4().hex
+    work_dir = UPLOAD_DIR / session_id
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    suffix = Path(file.filename or "video.mp4").suffix.lower() or ".mp4"
+    video_path = work_dir / f"source{suffix}"
+
+    try:
+        with video_path.open("wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"保存文件失败: {exc}") from exc
+
+    try:
+        result = pipeline.analyze(
+            str(video_path),
+            work_dir=str(work_dir),
+            extract_keyframes=True,
+            detector=detector,
+            detect_transitions=True,
+            describe_shots=True,
+            vlm_backend=backend,
+            keep_workdir=True,
+        )
+        result["_session_id"] = session_id
+        cut_plan = _build_cut_plan(template_dna, result)
+        _last_session_id = session_id
+        _last_dna = result
+        _last_source_video = str(video_path)
+        result["_cut_plan"] = cut_plan
+    except HTTPException:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise
+    except Exception as exc:
+        shutil.rmtree(work_dir, ignore_errors=True)
+        raise HTTPException(status_code=422, detail=f"分析失败: {exc}") from exc
+
+    return {"analysis": result, "cut_plan": cut_plan}
+
+
+@app.post("/api/draft/export")
+async def export_draft(body: dict):
+    """生成剪映专业版草稿 ZIP。body: {project_name, cuts: [{start, end}, ...]}"""
+    global _last_source_video
+
+    if not _last_source_video or not Path(_last_source_video).exists():
+        raise HTTPException(status_code=400, detail="请先通过「套用模板」上传自己的视频")
+
+    cuts = body.get("cuts") or []
+    if not cuts:
+        raise HTTPException(status_code=400, detail="缺少剪辑区间")
+    project_name = str(body.get("project_name") or "VideoDNA剪辑方案")
+
+    import tempfile
+
+    probe_info = ffmpeg_utils.probe(_last_source_video)
+    if not probe_info.get("duration"):
+        raise HTTPException(status_code=500, detail="无法读取源视频元信息")
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp.close()  # 释放句柄，zipfile 才能打开（Windows）
+    try:
+        draft_export.export_draft_zip(
+            project_name=project_name,
+            video_path=_last_source_video,
+            cuts=cuts,
+            probe_info=probe_info,
+            out_path=tmp.name,
+        )
+        safe_name = "".join(c for c in project_name if c not in '\\/:*?"<>|').strip() or "videodna"
+        return FileResponse(tmp.name, media_type="application/zip", filename=f"{safe_name}_剪映草稿.zip")
     except Exception:
         os.unlink(tmp.name)
         raise

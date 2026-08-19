@@ -166,18 +166,28 @@ input[type=file]{display:none;}
 .timeline-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:20px;}
 .timeline-card h3{font-size:13.5px;font-weight:650;margin-bottom:12px;display:flex;align-items:center;gap:6px;}
 .timeline-card h3 small{font-weight:400;color:var(--fg-3);font-size:11px;}
-.tml{position:relative;height:64px;background:var(--bg-soft);border-radius:10px;overflow:hidden;border:1px solid var(--border);}
-.tml-shot{position:absolute;top:0;bottom:0;border-right:1px solid rgba(0,0,0,.3);display:flex;align-items:flex-end;justify-content:center;padding-bottom:3px;cursor:pointer;transition:filter .15s;}
-.tml-shot:hover{filter:brightness(1.3);}
-.tml-label{font-size:9px;font-weight:650;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:92%;}
-.tml-beat{position:absolute;top:0;bottom:0;width:1px;background:var(--orange);opacity:.7;pointer-events:none;}
-.tml-sfx{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.6;border-radius:1px;pointer-events:none;}
-.tml-speech{position:absolute;bottom:0;height:8px;border-radius:3px;background:var(--cyan);opacity:.5;pointer-events:none;}
+/* ── Film Strip Timeline ── */
+.fs-wrap{position:relative;}
+.fs{position:relative;height:76px;background:var(--bg-soft);border-radius:10px;overflow-x:auto;overflow-y:hidden;border:1px solid var(--border);cursor:pointer;scrollbar-width:thin;}
+.fs::-webkit-scrollbar{height:8px;}
+.fs::-webkit-scrollbar-thumb{background:#2a2f3e;border-radius:4px;}
+.fs-shot{position:absolute;top:0;bottom:0;border-radius:6px;overflow:hidden;cursor:pointer;transition:filter .15s,transform .15s;border:1px solid rgba(255,255,255,.1);box-shadow:0 1px 5px rgba(0,0,0,.5);}
+.fs-shot img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;}
+.fs-shot .fs-label{position:absolute;left:3px;top:3px;font-size:9px;font-weight:700;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.9);background:rgba(0,0,0,.5);padding:1px 5px;border-radius:4px;pointer-events:none;z-index:2;}
+.fs-shot:hover{transform:translateY(-2px);filter:brightness(1.15);z-index:4;}
+.fs-shot.active{box-shadow:0 0 0 2px #fff, 0 0 16px rgba(255,255,255,.45);z-index:5;transform:translateY(-2px);}
+.fs-beat{position:absolute;top:0;bottom:0;width:1px;background:var(--orange);opacity:.85;pointer-events:none;}
+.fs-sfx{position:absolute;top:0;bottom:0;width:2px;background:var(--red);opacity:.6;pointer-events:none;}
+.fs-speech{position:absolute;bottom:0;height:10px;border-radius:3px;background:var(--cyan);opacity:.55;pointer-events:none;}
+.fs-playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 10px #fff;z-index:10;pointer-events:none;transition:left .1s linear;}
+.fs-timerow{font-size:11px;color:var(--accent-3);font-weight:650;margin-bottom:6px;min-height:14px;display:flex;justify-content:space-between;}
+.fs-preview{position:fixed;z-index:60;width:240px;border-radius:10px;overflow:hidden;background:var(--panel);border:1px solid var(--border-2);box-shadow:0 12px 40px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s;}
+.fs-preview img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#05060a;}
+.fs-preview .pv-body{padding:8px 10px;font-size:11px;color:var(--fg-2);line-height:1.5;}
+.fs-preview .pv-title{font-weight:700;color:var(--fg-1);}
 .tml-legend{display:flex;gap:14px;font-size:11px;color:var(--fg-2);margin-top:10px;flex-wrap:wrap;}
 .tml-legend span{display:flex;align-items:center;gap:5px;}
 .tml-legend .sw{width:10px;height:10px;border-radius:3px;display:inline-block;}
-.tml-shot.active{box-shadow:inset 0 0 0 2px #fff;z-index:5;filter:brightness(1.6);}
-.tml-playhead{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 10px #fff;z-index:10;pointer-events:none;transition:left .1s linear;}
 .tml-time{font-size:11px;color:var(--accent-3);font-weight:650;margin-left:8px;}
 
 /* ── Scene Grid ── */
@@ -187,6 +197,21 @@ input[type=file]{display:none;}
 .scene-card .icon{font-size:26px;display:block;margin-bottom:6px;}
 .scene-card .cnt{font-size:20px;font-weight:750;background:linear-gradient(135deg,#6d5df6,#38bdf8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 .scene-card .lbl{font-size:11px;color:var(--fg-2);margin-top:2px;}
+
+/* ── 剪辑方案 ── */
+.cutplan-card{background:var(--panel);border:1px solid var(--border-2);border-radius:var(--radius);padding:16px 18px;margin-bottom:16px;animation:pop .25s ease;}
+.cutplan-card h3{font-size:14px;font-weight:700;display:flex;align-items:baseline;gap:8px;}
+.cutplan-card h3 small{color:var(--fg-3);font-weight:500;}
+.cut-table-wrap{overflow-x:auto;margin:12px 0;border:1px solid var(--border);border-radius:10px;}
+.cut-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:420px;}
+.cut-table th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--fg-3);font-weight:600;padding:9px 12px;background:var(--bg-soft);border-bottom:1px solid var(--border);}
+.cut-table td{padding:9px 12px;border-bottom:1px solid var(--border);color:var(--fg-2);font-variant-numeric:tabular-nums;}
+.cut-table tbody tr{cursor:pointer;transition:background .15s;}
+.cut-table tbody tr:hover{background:rgba(109,93,246,.08);}
+.cut-table tbody tr:last-child td{border-bottom:none;}
+.cut-table .cut-play{color:var(--accent-3);font-size:11px;}
+.cut-actions{display:flex;align-items:center;gap:12px;}
+.cut-hint{font-size:11px;color:var(--fg-3);}
 
 /* ── Shot Grid ── */
 .shot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:12px;margin-bottom:20px;}
@@ -406,6 +431,7 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
           <small>支持 mp4 / mov / mkv / webm / avi · 最大 500MB</small>
         </div>
         <input type="file" id="fileInput" accept="video/*">
+        <input type="file" id="templateInput" accept="video/*" style="display:none">
         <div id="resultArea"></div>
       </div>
 
@@ -637,6 +663,9 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
 // ── State ──
 let currentResult = null;
 let currentFile = null;
+let currentCuts = null;       // 套用模板后的剪辑方案
+let currentTemplateName = ''; // 模板来源（示例视频名）
+let appliedVideoFile = null;  // 套用模板时上传的自己视频
 let compState = { components:[], models:[], plugins:[], skills:[] };
 
 // ── Tab Switching ──
@@ -763,6 +792,7 @@ function esc(s) { if (s === null || s === undefined) return ''; const d = docume
 async function uploadFile(f) {
   if (!f) return;
   document.getElementById('resultArea').innerHTML = '';
+  currentCuts = null; currentTemplateName = ''; appliedVideoFile = null;
   const maxSize = 500 * 1024 * 1024;
   if (f.size > maxSize) { toast('❌ 文件过大，最大 500MB', 'error'); return; }
 
@@ -798,8 +828,99 @@ async function uploadFile(f) {
   }
 }
 
+// ── 模板套用：自己的视频按示例视频的节奏生成剪辑方案 ──
+function pickTemplateVideo() {
+  document.getElementById('templateInput').click();
+}
+document.getElementById('templateInput').addEventListener('change', () => {
+  const f = document.getElementById('templateInput').files[0];
+  if (f) applyTemplate(f);
+  document.getElementById('templateInput').value = '';
+});
+
+async function applyTemplate(f) {
+  if (!currentResult || !currentResult.shots || !currentResult.shots.length) {
+    toast('❌ 请先上传并分析一支示例视频', 'error');
+    return;
+  }
+  showP('正在上传你的视频...', f.name);
+  updateP(10);
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('template', JSON.stringify(currentResult));
+  const s = getSettings();
+  const params = new URLSearchParams();
+  if (s.detector) params.set('detector', s.detector);
+  if (s.backend) params.set('backend', s.backend);
+  try {
+    updateP(20, '正在分析你的视频结构...');
+    const res = await fetch('/api/template/apply?' + params.toString(), { method: 'POST', body: fd });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || res.statusText); }
+    const data = await res.json();
+    updateP(90, '正在生成剪辑方案...');
+    currentResult = data.analysis;
+    currentCuts = data.cut_plan.cuts;
+    currentTemplateName = currentResult.meta?.source_file || '示例视频';
+    appliedVideoFile = f;
+    updateP(100, '完成！');
+    setTimeout(hideP, 500);
+    renderResult(data.analysis, f, { cutPlan: data.cut_plan });
+    toast('✅ 剪辑方案已生成：' + data.cut_plan.total + ' 个镜头 · ' + data.cut_plan.beat_aligned_count + ' 个卡点', 'success');
+  } catch (err) {
+    hideP();
+    toast('❌ ' + err.message, 'error');
+  }
+}
+
+// ── 下载剪映草稿 ──
+async function downloadDraft() {
+  if (!currentCuts || !currentCuts.length) { toast('❌ 请先套用模板生成剪辑方案', 'error'); return; }
+  try {
+    toast('⏳ 正在生成剪映草稿...', 'info');
+    const res = await fetch('/api/draft/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project_name: 'VideoDNA剪辑方案', cuts: currentCuts }),
+    });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || res.statusText); }
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'VideoDNA剪辑方案_剪映草稿.zip';
+    a.click();
+    URL.revokeObjectURL(a.href);
+    showDraftHelp();
+  } catch (err) {
+    toast('❌ ' + err.message, 'error');
+  }
+}
+
+function showDraftHelp() {
+  const path = 'C:\\Users\\' + (navigator.userAgent.includes('Windows') ? '%用户名%' : '') + '\\AppData\\Local\\JianyingPro\\User Data\\Projects\\com.lveditor.draft';
+  const help = [
+    '📦 剪映草稿已下载！安装步骤：',
+    '1. 解压 ZIP，得到「draft」文件夹',
+    '2. 打开剪映专业版 → 设置 → 全局设置 → 查看「草稿位置」',
+    '   默认：%LOCALAPPDATA%\\JianyingPro\\User Data\\Projects\\com.lveditor.draft\\',
+    '3. 把解压的文件夹复制到该目录',
+    '4. 重启剪映（或刷新草稿列表），即可打开草稿查看剪辑方案',
+  ].join('\n');
+  const modal = document.getElementById('draftHelpModal') || (() => {
+    const div = document.createElement('div');
+    div.id = 'draftHelpModal';
+    div.className = 'modal-overlay active';
+    div.innerHTML = '<div class="modal"><div class="modal-head"><h3>📦 剪映草稿安装</h3><button class="modal-x" onclick="this.closest(\'.modal-overlay\').remove()">×</button></div><div class="modal-body"><pre id="draftHelpText" style="white-space:pre-wrap;line-height:1.9;color:var(--fg-2);font-size:13px;margin:0"></pre></div><div class="modal-foot"><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">知道了</button></div></div>';
+    document.body.appendChild(div);
+    return div;
+  })();
+  modal.classList.add('active');
+  modal.querySelector('#draftHelpText').textContent = help;
+}
+
 // ── Render ──
-function renderResult(d, file) {
+function renderResult(d, file, opts) {
+  opts = opts || {};
+  const cutPlan = opts.cutPlan || null;
   const m = d.meta || {};
   const a = d.audio || {};
   const shots = d.shots || [];
@@ -846,14 +967,38 @@ function renderResult(d, file) {
     ${d.summary?`<div class="summary-card"><strong>📝 摘要${d.summary_method==='llm'?' · AI 生成':''}</strong><div style="margin-top:4px;color:var(--fg-2)">${esc(d.summary)}</div></div>`:''}
 
     <div class="timeline-card">
-      <h3>⏱️ 时间轴 <small>${m.duration?m.duration.toFixed(1)+'s':''}</small><span class="tml-time" id="tmlTime">0.0s</span></h3>
-      <div class="tml" id="tml"><div class="tml-playhead" id="tmlPlayhead" style="left:0"></div></div>
+      <h3>🎞️ 时间轴 <small>${m.duration?m.duration.toFixed(1)+'s':''}</small><span class="tml-time" id="tmlTime">0.0s</span></h3>
+      <div class="fs-wrap">
+        <div class="fs-timerow"><span id="fsStart">0.0s</span><span id="fsEnd">${m.duration?m.duration.toFixed(1)+'s':''}</span></div>
+        <div class="fs" id="fs">
+          <div class="fs-playhead" id="fsPlayhead" style="left:0"></div>
+          <div class="fs-preview" id="fsPreview"><img alt=""><div class="pv-body"><span class="pv-title"></span><div class="pv-desc"></div></div></div>
+        </div>
+      </div>
       <div class="tml-legend">
         <span><span class="sw" style="background:var(--orange)"></span> 节拍</span>
         <span><span class="sw" style="background:var(--red)"></span> 音效</span>
         <span><span class="sw" style="background:var(--cyan)"></span> 语音</span>
+        <span style="margin-left:auto">鼠标悬停预览 · 点击跳转</span>
       </div>
     </div>
+
+    ${cutPlan ? `
+    <div class="cutplan-card">
+      <h3>✂️ 剪辑方案 <small>套用「${esc(cutPlan.source || '示例视频')}」节奏 · ${cutPlan.total} 个镜头 · ${cutPlan.beat_aligned_count} 个卡点 · 共 ${cutPlan.target_duration.toFixed(1)}s</small></h3>
+      <div class="cut-table-wrap">
+        <table class="cut-table">
+          <thead><tr><th>#</th><th>起点</th><th>终点</th><th>时长</th><th>卡点</th><th></th></tr></thead>
+          <tbody>
+            ${cutPlan.cuts.map((c, i) => `<tr onclick="window.__seek(${c.start})" title="点击预览该切点"><td>${i}</td><td>${c.start.toFixed(2)}s</td><td>${c.end.toFixed(2)}s</td><td>${c.duration.toFixed(2)}s</td><td>${c.aligned_to_beat ? '🎯' : '—'}</td><td class="cut-play">▶</td></tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="cut-actions">
+        <button class="btn btn-sm btn-primary" onclick="downloadDraft()">📦 下载剪映草稿</button>
+        <span class="cut-hint">点击任意行可预览该切点</span>
+      </div>
+    </div>` : ''}
 
     <div class="section-header"><h3>🎞️ 分镜 <small>${shots.length} 个镜头 · ${described} 个已描述</small></h3></div>
     <div class="shot-grid" id="shotGrid"></div>
@@ -866,6 +1011,7 @@ function renderResult(d, file) {
         <button class="btn btn-sm" onclick="dlExp('cutmark')">📋 Cutmark</button>
         <button class="btn btn-sm" onclick="dlExp('srt')">📜 SRT</button>
         <button class="btn btn-sm btn-primary" onclick="dlExp('all')">📦 全部 ZIP</button>
+        <button class="btn btn-sm" onclick="pickTemplateVideo()" title="用自己的视频套用当前视频的镜头节奏">🎯 套用模板到我的视频</button>
       </div>
     </div>
 
@@ -875,76 +1021,116 @@ function renderResult(d, file) {
     </div>
   `;
 
-  const tml = document.getElementById('tml');
-  shots.forEach((s,i) => {
-    const el = document.createElement('div');
-    el.className = 'tml-shot';
-    el.style.left = (s.start/total*100)+'%';
-    el.style.width = Math.max(s.duration/total*100,0.5)+'%';
-    el.style.background = palette[i%palette.length]+'80';
-    el.innerHTML = '<span class="tml-label">'+i+(s.transition?'·'+s.transition:'')+'</span>';
-    el.title = '镜头 '+i+': '+s.start.toFixed(1)+'s → '+s.end.toFixed(1)+'s ('+s.duration.toFixed(1)+'s)'+(s.content?'\n'+s.content:'')+(s.transcript?'\n🎤 '+s.transcript:'')+'\n点击跳转到该镜头';
-    el.addEventListener('click', () => seekTo(shots[i].start, i));
-    tml.appendChild(el);
-  });
-  (a.beats||[]).forEach(b => { const el = document.createElement('div'); el.className='tml-beat'; el.style.left=(b/total*100)+'%'; tml.appendChild(el); });
-  (a.sfx_candidates||[]).forEach(sf => { const el = document.createElement('div'); el.className='tml-sfx'; el.style.left=(sf.time/total*100)+'%'; el.title='音效: '+sf.time.toFixed(2)+'s'; tml.appendChild(el); });
-  sr.forEach(r => { const el = document.createElement('div'); el.className='tml-speech'; el.style.left=(r.start/total*100)+'%'; el.style.width=Math.max((r.end-r.start)/total*100,0.3)+'%'; el.title=(r.text||'语音')+' ['+r.start.toFixed(1)+'s→'+r.end.toFixed(1)+'s]'; tml.appendChild(el); });
+  // ── Film Strip Timeline ──
+  const fs = document.getElementById('fs');
+  const preview = document.getElementById('fsPreview');
+  const pvImg = preview.querySelector('img');
+  const pvTitle = preview.querySelector('.pv-title');
+  const pvDesc = preview.querySelector('.pv-desc');
+  const PX = 46; // 每秒像素宽度
+  const totalDur = shots.reduce((a, s) => a + s.duration, 0) || m.duration || 1;
+  const fsW = Math.max(totalDur * PX, fs.clientWidth || 800);
+  fs.style.width = fsW + 'px';
 
+  shots.forEach((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'fs-shot';
+    el.dataset.idx = i;
+    el.style.left = (s.start * PX) + 'px';
+    el.style.width = Math.max(s.duration * PX - 2, 10) + 'px';
+    const img = document.createElement('img');
+    img.src = '/api/frames/' + (s.keyframe || '');
+    img.onerror = () => img.style.display = 'none';
+    const lbl = document.createElement('span');
+    lbl.className = 'fs-label';
+    lbl.textContent = i;
+    el.appendChild(img); el.appendChild(lbl);
+    el.title = '镜头 ' + i + ': ' + s.start.toFixed(1) + 's → ' + s.end.toFixed(1) + 's (' + s.duration.toFixed(1) + 's)' + (s.transition ? '\n切换: ' + s.transition : '') + (s.content ? '\n' + s.content : '') + (s.transcript ? '\n🎤 ' + s.transcript : '') + '\n点击跳转到该镜头';
+    el.addEventListener('click', () => seekTo(s.start, i));
+    el.addEventListener('mouseenter', (e) => showPreview(s, e, el));
+    el.addEventListener('mousemove', (e) => showPreview(s, e, el));
+    el.addEventListener('mouseleave', () => preview.style.opacity = 0);
+    fs.appendChild(el);
+  });
+  (a.beats || []).forEach(b => { const el = document.createElement('div'); el.className = 'fs-beat'; el.style.left = (b * PX) + 'px'; fs.appendChild(el); });
+  (a.sfx_candidates || []).forEach(sf => { const el = document.createElement('div'); el.className = 'fs-sfx'; el.style.left = (sf.time * PX) + 'px'; el.title = '音效: ' + sf.time.toFixed(2) + 's'; fs.appendChild(el); });
+  sr.forEach(r => { const el = document.createElement('div'); el.className = 'fs-speech'; el.style.left = (r.start * PX) + 'px'; el.style.width = Math.max((r.end - r.start) * PX - 1, 6) + 'px'; el.title = (r.text || '语音') + ' [' + r.start.toFixed(1) + 's→' + r.end.toFixed(1) + 's]'; fs.appendChild(el); });
+
+  function showPreview(s, e, el) {
+    pvImg.src = '/api/frames/' + (s.keyframe || '');
+    pvTitle.textContent = '镜头 ' + (el ? el.dataset.idx : '') + ' · ' + s.start.toFixed(1) + 's→' + s.end.toFixed(1) + 's · ' + s.duration.toFixed(1) + 's' + (s.transition ? ' · ' + s.transition : '');
+    pvDesc.textContent = (s.content || '') + (s.transcript ? ' 🎤' + s.transcript : '');
+    const fsRect = fs.getBoundingClientRect();
+    let x = e.clientX - fsRect.left + fs.scrollLeft;
+    preview.style.left = (e.clientX + 14) + 'px';
+    preview.style.top = (fsRect.top - 130) + 'px';
+    preview.style.opacity = 1;
+  }
+  fs.addEventListener('click', (e) => {
+    if (e.target === fs) {
+      const rect = fs.getBoundingClientRect();
+      const t = Math.max(0, Math.min(1, (e.clientX - rect.left + fs.scrollLeft) / fsW)) * totalDur;
+      const idx = shots.findIndex(s => t >= s.start && t < s.end);
+      seekTo(t, idx);
+    }
+  });
+  fs.addEventListener('mouseleave', () => preview.style.opacity = 0);
+
+  // ── 分镜卡片 ──
   const sg = document.getElementById('shotGrid');
   window.__lastShots = shots;
-  shots.forEach((s,i) => {
+  shots.forEach((s, i) => {
     const card = document.createElement('div');
     card.className = 'shot-card';
-    let tags = '<span class="tag">'+(s.transition||'硬切')+'</span>';
+    let tags = '<span class="tag">' + (s.transition || '硬切') + '</span>';
     if (s.beat_aligned) tags += '<span class="tag tag-green">🎯 卡点</span>';
-    if (s.scene_type) tags += '<span class="tag tag-blue">'+(sceneLabels[s.scene_type]||s.scene_type)+'</span>';
-    if (s.face_count>0) tags += '<span class="tag tag-orange">👤 ×'+s.face_count+'</span>';
-    if (s.emotion) tags += '<span class="tag tag-pink">'+esc(s.emotion)+'</span>';
-    if (s.color_tone) tags += '<span class="tag">🎨 '+s.color_tone+'</span>';
-    card.title = '点击跳转到该镜头 ('+s.start.toFixed(1)+'s)';
+    if (s.scene_type) tags += '<span class="tag tag-blue">' + (sceneLabels[s.scene_type] || s.scene_type) + '</span>';
+    if (s.face_count > 0) tags += '<span class="tag tag-orange">👤 ×' + s.face_count + '</span>';
+    if (s.emotion) tags += '<span class="tag tag-pink">' + esc(s.emotion) + '</span>';
+    if (s.color_tone) tags += '<span class="tag">🎨 ' + s.color_tone + '</span>';
+    card.title = '点击跳转到该镜头 (' + s.start.toFixed(1) + 's)';
     card.innerHTML = `
-      <img src="/api/frames/${s.keyframe||''}" alt="" loading="lazy" onerror="this.style.display='none'">
+      <img src="/api/frames/${s.keyframe || ''}" alt="" loading="lazy" onerror="this.style.display='none'">
       <div class="shot-body">
         <div><span class="sn">镜头 ${i}</span><span class="sd">${s.duration.toFixed(1)}s</span></div>
         <div class="shot-tags">${tags}</div>
-        ${s.transcript?'<div class="transcript">🎤 '+esc(s.transcript)+'</div>':''}
-        ${s.content?'<div class="desc">'+esc(s.content)+(s.shot_scale?' ['+s.shot_scale+']':'')+(s.camera_motion?' · '+s.camera_motion:'')+'</div>':''}
+        ${s.transcript ? '<div class="transcript">🎤 ' + esc(s.transcript) + '</div>' : ''}
+        ${s.content ? '<div class="desc">' + esc(s.content) + (s.shot_scale ? ' [' + s.shot_scale + ']' : '') + (s.camera_motion ? ' · ' + s.camera_motion : '') + '</div>' : ''}
       </div>`;
     sg.appendChild(card);
   });
 
   // ── 时间轴 / 分镜 双向联动 ──
   const videoEl = document.getElementById('videoEl');
-  const playhead = document.getElementById('tmlPlayhead');
+  const playhead = document.getElementById('fsPlayhead');
   const tmlTime = document.getElementById('tmlTime');
-  const segEls = Array.from(tml.querySelectorAll('.tml-shot'));
+  const fsStart = document.getElementById('fsStart');
+  const segEls = Array.from(fs.querySelectorAll('.fs-shot'));
   const cardEls = Array.from(sg.querySelectorAll('.shot-card'));
-  const clamp = (t) => Math.max(0, Math.min(t, m.duration || 0));
+  const clamp = (t) => Math.max(0, Math.min(t, totalDur));
   function setActive(i) {
     segEls.forEach((el, idx) => el.classList.toggle('active', idx === i));
     cardEls.forEach((el, idx) => el.classList.toggle('active', idx === i));
   }
   function movePlayhead(t) {
-    if (playhead) playhead.style.left = (clamp(t) / (m.duration || 1) * 100) + '%';
+    if (playhead) playhead.style.left = (clamp(t) * PX) + 'px';
     if (tmlTime) tmlTime.textContent = t.toFixed(1) + 's';
+    if (fsStart) fsStart.textContent = t.toFixed(1) + 's';
+  }
+  function scrollFsTo(t) {
+    const x = t * PX;
+    fs.scrollTo({ left: Math.max(0, Math.min(x - fs.clientWidth / 2, fs.scrollWidth - fs.clientWidth)), behavior: 'smooth' });
   }
   function seekTo(t, i) {
     if (videoEl) { videoEl.currentTime = clamp(t); videoEl.play().catch(() => {}); }
     setActive(i);
     movePlayhead(t);
+    scrollFsTo(t);
     if (cardEls[i] && cardEls[i].scrollIntoView) cardEls[i].scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
   }
   segEls.forEach((el, i) => el.addEventListener('click', () => seekTo(shots[i].start, i)));
   cardEls.forEach((el, i) => el.addEventListener('click', () => seekTo(shots[i].start, i)));
-  tml.addEventListener('click', (e) => {
-    if (e.target === tml || e.target === playhead) {
-      const rect = tml.getBoundingClientRect();
-      const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (m.duration || 0);
-      const idx = shots.findIndex(s => t >= s.start && t < s.end);
-      seekTo(t, idx);
-    }
-  });
+  window.__seek = (t) => { if (videoEl) { videoEl.currentTime = clamp(t); videoEl.play().catch(() => {}); } movePlayhead(t); scrollFsTo(t); };
   if (videoEl) {
     videoEl.addEventListener('timeupdate', () => {
       const t = videoEl.currentTime;

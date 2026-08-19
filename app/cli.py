@@ -11,6 +11,11 @@ from pathlib import Path
 from .analyzer import pipeline
 from . import exporter
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 
 def analyze_single(video: str, outdir: str, **kwargs) -> dict:
     """分析单个视频，返回完整 DNA。"""

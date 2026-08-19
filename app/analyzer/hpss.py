@@ -172,7 +172,6 @@ def _legacy_analysis(y: np.ndarray, sr: int) -> dict:
             "rms_db": [round(float(librosa.amplitude_to_db([r], ref=1.0)[0]), 2)
                        for r in rms],
         }
-        result["rms_mean_db"] = round(float(np.mean(rms) * 20 * np.log10(1)), 2)
         # 重新计算 dB
         rms_db = librosa.amplitude_to_db(rms, ref=1.0)
         result["rms_mean_db"] = round(float(np.mean(rms_db)), 2)

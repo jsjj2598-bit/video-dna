@@ -29,9 +29,9 @@ echo [Backend]^ Ready!
 echo [Desktop]^ Launching Electron...
 
 if exist "dist\win-unpacked\Video DNA Analyzer.exe" (
-    start "" "dist\win-unpacked\Video DNA Analyzer.exe"
+    start "" "dist\win-unpacked\Video DNA Analyzer.exe" --disable-web-security --allow-file-access-from-files
 ) else (
-    npx electron .
+    npx electron . --disable-web-security --allow-file-access-from-files
 )
 
 pause

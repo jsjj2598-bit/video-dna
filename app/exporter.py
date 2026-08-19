@@ -14,9 +14,10 @@ from xml.dom import minidom
 
 def _tc(seconds: float, fps: float = 30.0) -> str:
     """秒 → SMPTE 时间码 (HH:MM:SS:FF)。"""
+    fps_round = int(round(fps))
     total_frames = int(round(seconds * fps))
-    ff = total_frames % int(fps)
-    total_secs = total_frames // int(fps)
+    ff = total_frames % fps_round
+    total_secs = total_frames // fps_round
     hh = total_secs // 3600
     mm = (total_secs % 3600) // 60
     ss = total_secs % 60
@@ -76,7 +77,7 @@ def export_edl(dna: dict, output_path: str | Path, fps: float = 30.0) -> str:
 
         # 转场详细信息
         if sh.get("transition") and sh["transition"] in ("dissolve", "fade", "white_flash"):
-            dur = sh.get("transition_confidence", 0.5) * 30  # 帧数
+            dur = sh.get("transition_confidence", 0.5) * fps  # 帧数
             lines.append(f"* EFFECT NAME: {sh['transition']}")
             lines.append(f"* EFFECT DURATION: {int(dur)}")
 
@@ -158,12 +159,13 @@ def export_fcp7xml(dna: dict, output_path: str | Path, fps: float = 30.0) -> str
             SubElement(trans_name, "name").text = sh["transition"]
 
         # 台词元数据
+        comments = []
         if sh.get("transcript"):
-            SubElement(clip, "comment").text = f"DIALOG: {sh['transcript'][:200]}"
+            comments.append(f"DIALOG: {sh['transcript'][:200]}")
         if sh.get("beat_aligned"):
-            SubElement(clip, "comment").text = (
-                (clip.findtext("comment") or "") + "\nBEAT_ALIGNED"
-            )
+            comments.append("BEAT_ALIGNED")
+        if comments:
+            SubElement(clip, "comment").text = "\n".join(comments)
 
     # 音频
     audio_info = dna.get("audio", {})

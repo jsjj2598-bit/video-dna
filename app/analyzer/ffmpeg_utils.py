@@ -125,7 +125,8 @@ def extract_audio(video_path: str, out_dir: str, sr: int = 22050) -> str:
 def extract_frame(video_path: str, time_sec: float, out_path: str) -> str:
     ffmpeg = find_ffmpeg()
     cmd = [
-        ffmpeg, "-y", "-ss", str(time_sec), "-i", str(video_path),
+        ffmpeg, "-y", "-i", str(video_path),
+        "-ss", f"{max(0.0, time_sec):.3f}",
         "-frames:v", "1", "-q:v", "2", str(out_path),
     ]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)

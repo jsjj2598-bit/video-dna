@@ -54,9 +54,12 @@ def _estimate_shot_scale(bgr: np.ndarray) -> str:
     edges = cv2.Canny(gray, 50, 150)
     edge_density = edges.sum() / (h * w)
 
-    faces = _get_face_cascade().detectMultiScale(
-        gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
-    )
+    cascade = _get_face_cascade()
+    faces: list = []
+    if cascade is not None:
+        faces = cascade.detectMultiScale(
+            gray, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30)
+        )
 
     if len(faces) > 0:
         biggest_face = max(f[2] for f in faces)
@@ -117,19 +120,34 @@ _face_cascade = None
 
 
 def _get_face_cascade():
-    """懒加载人脸检测器。"""
+    """懒加载人脸检测器。
+
+    OpenCV 5.x 移除了 CascadeClassifier，此时返回 None，调用方应优雅降级。
+    """
     global _face_cascade
     if _face_cascade is None:
-        _face_cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-    return _face_cascade
+        classifier_cls = getattr(cv2, "CascadeClassifier", None)
+        if classifier_cls is None:
+            _face_cascade = False
+            return None
+        try:
+            _face_cascade = classifier_cls(
+                cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+            )
+            if _face_cascade.empty():
+                _face_cascade = False
+        except Exception:
+            _face_cascade = False
+    return _face_cascade or None
 
 
 def _count_faces(bgr: np.ndarray) -> int:
     """检测画面中的人脸数量。"""
+    cascade = _get_face_cascade()
+    if cascade is None:
+        return 0
     gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    faces = _get_face_cascade().detectMultiScale(
+    faces = cascade.detectMultiScale(
         gray, scaleFactor=1.15, minNeighbors=4, minSize=(40, 40)
     )
     return len(faces)
@@ -329,6 +347,49 @@ def _call_qwen(bgr: np.ndarray, prompt: str, model: str = "qwen-vl-max") -> dict
         return None
 
 
+def _call_custom(bgr: np.ndarray, prompt: str, cfg: dict) -> dict | None:
+    """调用任意 OpenAI 兼容的视觉端点（含 Ollama / 自定义 base_url）。"""
+    key = cfg.get("api_key") or os.environ.get("OPENAI_API_KEY")
+    try:
+        import httpx
+        import json
+
+        _, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
+
+        url = cfg["base_url"].rstrip("/") + "/chat/completions"
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["Authorization"] = f"Bearer {key}"
+        resp = httpx.post(
+            url,
+            headers=headers,
+            json={
+                "model": cfg.get("model", "gpt-4o"),
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64}"}},
+                        ],
+                    }
+                ],
+                "max_tokens": 256,
+            },
+            timeout=60.0,
+        )
+        if resp.status_code == 200:
+            text = resp.json()["choices"][0]["message"]["content"]
+            try:
+                return json.loads(text)
+            except Exception:
+                return {"content": text, "shot_scale": None, "camera_motion": None, "mood": None, "scene_type": None, "face_count": None}
+    except Exception:
+        return None
+    return None
+
+
 def describe_shot(
     keyframe_path: str | Path,
     shot_index: int,
@@ -336,6 +397,7 @@ def describe_shot(
     prev_keyframe_path: str | Path | None = None,
     backend: str = "auto",
     model: str = "gpt-4o",
+    model_cfg: dict | None = None,
 ) -> dict:
     """对一个关键帧做深度语义描述（含 AI 短剧/漫剧优化字段）。
 
@@ -356,6 +418,20 @@ def describe_shot(
         prev_bgr = cv2.imread(str(prev_keyframe_path))
 
     prompt = _build_prompt(shot_index, bgr, shot_info or {})
+
+    # — API 尝试（优先使用注册表中配置的自定义模型） —
+    if model_cfg is not None:
+        result = _call_custom(bgr, prompt, model_cfg)
+        if result:
+            result["method"] = model_cfg.get("name", "custom")
+            result.setdefault("camera_motion", _estimate_camera_motion(bgr, prev_bgr))
+            result.setdefault("shot_scale", _estimate_shot_scale(bgr))
+            result.setdefault("mood", _estimate_brightness(bgr) + "·" + _estimate_contrast(bgr))
+            result.setdefault("scene_type", _classify_scene_type(bgr, _count_faces(bgr), result.get("shot_scale", "中景"), result.get("camera_motion", "固定")))
+            result.setdefault("face_count", _count_faces(bgr))
+            result.setdefault("color_tone", _estimate_color_tone(bgr))
+            result.setdefault("emotion", _analyze_emotion(bgr))
+            return result
 
     # — API 尝试 —
     if backend in ("auto", "openai"):
@@ -420,6 +496,7 @@ def describe_all(
     frames_dir: str | Path,
     backend: str = "auto",
     model: str = "gpt-4o",
+    model_cfg: dict | None = None,
 ) -> dict:
     """对 DNA 中所有镜头进行语义描述，就地更新 shots 字段。"""
     frames_dir = Path(frames_dir)
@@ -436,7 +513,7 @@ def describe_all(
 
         desc = describe_shot(
             kf_path, i, shot_info=sh, prev_keyframe_path=prev_kf,
-            backend=backend, model=model,
+            backend=backend, model=model, model_cfg=model_cfg,
         )
         sh["content"] = desc.get("content")
         sh["shot_scale"] = desc.get("shot_scale")

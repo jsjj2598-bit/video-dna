@@ -61,51 +61,55 @@ def _speech_regions_from_energy(wav_path: str, sr: int = 22050,
 
 
 def transcribe(wav_path: str, model_size: str = "small",
-               language: str | None = None) -> dict:
-    """台词转写。先尝试 faster-whisper（网络模型），失败则降级到能量检测。"""
+               language: str | None = None, use_whisper: bool = True) -> dict:
+    """台词转写。先尝试 faster-whisper（网络模型），失败则降级到能量检测。
+
+    use_whisper=False 时直接使用能量检测（组件关闭 ASR 时）。
+    """
     result = empty_transcript()
 
     # 1. 尝试 faster-whisper ASR
     asr_ok = False
-    try:
-        from faster_whisper import WhisperModel
-        import os
+    if use_whisper:
+        try:
+            from faster_whisper import WhisperModel
+            import os
 
-        # 检查缓存中是否有模型
-        model = WhisperModel(model_size, device="cpu", compute_type="int8")
-        segments, info = model.transcribe(
-            wav_path,
-            language=language,
-            beam_size=5,
-            vad_filter=True,
-        )
+            # 检查缓存中是否有模型
+            model = WhisperModel(model_size, device="cpu", compute_type="int8")
+            segments, info = model.transcribe(
+                wav_path,
+                language=language,
+                beam_size=5,
+                vad_filter=True,
+            )
 
-        if info is not None:
-            result["language"] = info.language
+            if info is not None:
+                result["language"] = info.language
 
-        segs: list[dict] = []
-        texts: list[str] = []
-        for seg in segments:
-            segs.append({
-                "start": round(float(seg.start), 3),
-                "end": round(float(seg.end), 3),
-                "text": seg.text.strip(),
-            })
-            texts.append(seg.text.strip())
+            segs: list[dict] = []
+            texts: list[str] = []
+            for seg in segments:
+                segs.append({
+                    "start": round(float(seg.start), 3),
+                    "end": round(float(seg.end), 3),
+                    "text": seg.text.strip(),
+                })
+                texts.append(seg.text.strip())
 
-        result["segments"] = segs
-        result["text"] = "\n".join(texts)
-        result["word_count"] = sum(len(t) for t in texts)
+            result["segments"] = segs
+            result["text"] = "\n".join(texts)
+            result["word_count"] = sum(len(t) for t in texts)
 
-        # 也用 ASR 的结果填充 speech_regions
-        result["speech_regions"] = [
-            {"start": s["start"], "end": s["end"], "text": s["text"]}
-            for s in segs
-        ]
-        asr_ok = True
+            # 也用 ASR 的结果填充 speech_regions
+            result["speech_regions"] = [
+                {"start": s["start"], "end": s["end"], "text": s["text"]}
+                for s in segs
+            ]
+            asr_ok = True
 
-    except Exception:
-        pass  # ASR 失败（无网络/无模型），走降级
+        except Exception:
+            pass  # ASR 失败（无网络/无模型），走降级
 
     # 2. 降级：能量检测语音段落
     if not asr_ok:

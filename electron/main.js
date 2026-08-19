@@ -4,12 +4,21 @@
  * Spawns the Python FastAPI backend as a child process,
  * opens a native window, and cleans up on exit.
  */
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const http = require('http');
 
 const PORT = 8000;
 const BACKEND_URL = `http://127.0.0.1:${PORT}`;
+
+const LOG_FILE = path.join(require('os').tmpdir(), 'videodna-electron.log');
+function log(...args) {
+  const line = `[${new Date().toISOString()}] ${args.join(' ')}`;
+  console.log(line);
+  try { fs.appendFileSync(LOG_FILE, line + '\n'); } catch (_) {}
+}
 
 let pythonProcess = null;
 let mainWindow = null;
@@ -17,7 +26,9 @@ let mainWindow = null;
 // ── Detect Python executable ──
 function findPython() {
   const candidates = [];
-  const root = path.resolve(__dirname, '..');
+  const root = app.isPackaged
+    ? process.resourcesPath
+    : path.resolve(__dirname, '..');
   if (process.platform === 'win32') {
     candidates.push(path.join(root, '.venv', 'Scripts', 'python.exe'));
     candidates.push(path.join(root, '.venv', 'Scripts', 'python3.exe'));
@@ -34,38 +45,81 @@ function findPython() {
   return candidates;
 }
 
+function isBackendUp() {
+  return new Promise((resolve) => {
+    const req = http.get(`${BACKEND_URL}/health`, (res) => {
+      res.resume();
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.setTimeout(1500, () => { req.destroy(); resolve(false); });
+  });
+}
+
+function findBackendExe() {
+  const exe = app.isPackaged
+    ? path.join(process.resourcesPath, 'backend.exe')
+    : path.join(path.resolve(__dirname, '..'), 'dist', 'backend.exe');
+  log('findBackendExe ->', exe, 'exists=' + fs.existsSync(exe), 'isPackaged=' + app.isPackaged);
+  return exe;
+}
+
 function startBackend() {
   const cwd = path.resolve(__dirname, '..');
-  
-  // Ensure uploads dir exists
-  const fs = require('fs');
-  const uploadsDir = path.join(cwd, 'uploads');
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-  // 打包后，backend.exe 在 resources 目录；开发模式在 dist 目录
-  const backendExe = app.isPackaged
-    ? path.join(process.resourcesPath, 'backend.exe')
-    : path.join(cwd, 'dist', 'backend.exe');
+  // 若后端已在运行（如 start_desktop.cmd 已启动 uvicorn），跳过启动避免端口冲突
+  if (pythonProcess) return pythonProcess;
 
-  if (!fs.existsSync(backendExe)) {
-    console.error('Backend executable not found:', backendExe);
-    return;
+  const backendExe = findBackendExe();
+  let spawnCommand = null;
+
+  if (fs.existsSync(backendExe)) {
+    spawnCommand = {
+      cmd: backendExe,
+      args: [],
+      cwd: path.dirname(backendExe),
+    };
+  } else {
+    // 未编译 backend.exe 时，回退到 .venv 的 Python 源码启动
+    const pyCandidates = process.platform === 'win32'
+      ? [path.join(cwd, '.venv', 'Scripts', 'python.exe'), 'python']
+      : [path.join(cwd, '.venv', 'bin', 'python'), 'python3'];
+    const py = pyCandidates.find((p) => p === 'python' || fs.existsSync(p));
+    if (!py) {
+      console.error('[electron] 未找到 Python 解释器（.venv 或系统 python）');
+      return null;
+    }
+    spawnCommand = {
+      cmd: py,
+      args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(PORT), '--log-level', 'warning'],
+      cwd,
+    };
   }
 
-  console.log(`[electron] Starting backend: ${backendExe}`);
+  console.log(`[electron] Starting backend: ${spawnCommand.cmd} ${spawnCommand.args.join(' ')}`);
+  log('spawning:', spawnCommand.cmd, spawnCommand.args.join(' '), 'cwd=' + spawnCommand.cwd);
 
-  pythonProcess = spawn(backendExe, [], {
-    cwd: path.dirname(backendExe),
+  pythonProcess = spawn(spawnCommand.cmd, spawnCommand.args, {
+    cwd: spawnCommand.cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env },
+    windowsHide: true,
+  });
+
+  pythonProcess.on('error', (err) => {
+    log('SPAWN_ERROR:', err.message);
+    console.error('[electron] spawn error:', err.message);
+    pythonProcess = null;
   });
 
   pythonProcess.stdout.on('data', (data) => {
     console.log(`[backend] ${data.toString().trim()}`);
+    try { fs.appendFileSync(LOG_FILE, '[backend] ' + data.toString().trim() + '\n'); } catch (_) {}
   });
 
   pythonProcess.stderr.on('data', (data) => {
     console.error(`[backend:err] ${data.toString().trim()}`);
+    try { fs.appendFileSync(LOG_FILE, '[backend:err] ' + data.toString().trim() + '\n'); } catch (_) {}
   });
 
   pythonProcess.on('exit', (code) => {
@@ -78,7 +132,6 @@ function startBackend() {
 
 function waitForBackend(retries = 30, interval = 500) {
   return new Promise((resolve, reject) => {
-    const http = require('http');
     let attempts = 0;
 
     const check = () => {
@@ -116,10 +169,11 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
+      webSecurity: false,   // 加载本地后端页面需要，仅限本机
     },
   });
-console.log('Loading backend URL directly...');
-mainWindow.show();
+  console.log('Loading backend URL directly...');
+  mainWindow.show();
   mainWindow.loadURL(BACKEND_URL);
 
   // Build native app menu
@@ -178,36 +232,75 @@ mainWindow.show();
 }
 
 app.whenReady().then(async () => {
-  const fs = require('fs');
-  const pr = path.resolve(__dirname, '..');
-  const backendExe = app.isPackaged
-    ? path.join(process.resourcesPath, 'backend.exe')
-    : path.join(pr, 'dist', 'backend.exe');
-  const ok = fs.existsSync(backendExe) ||
-             fs.existsSync(path.join(pr, '.venv')) ||
-             fs.existsSync(path.join(pr, 'app', 'main.py'));
-  if (!ok) {
-    const html = `<!DOCTYPE html><html><body style="background:#1a1d23;color:#e0e2e8;font-family:system-ui;padding:40px">
-<h2 style="color:#5b8cff">Video DNA Analyzer</h2>
-<p style="color:#8a90a0">Portable mode needs Python backend running.</p>
-<hr style="border-color:#2a2f3a">
-<h3>1. Install</h3>
-<pre style="background:#22252e;padding:12px;border-radius:8px">python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt</pre>
-<h3>2. Start backend</h3>
-<pre style="background:#22252e;padding:12px;border-radius:8px">.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000</pre>
-<h3>3. Refresh</h3>
-<button onclick="location.reload()" style="background:#5b8cff;border:none;color:#fff;padding:8px 20px;border-radius:6px;cursor:pointer">Refresh</button>
-<p>Or use start_desktop.cmd for one-click launch.</p>
-</body></html>`;
-    mainWindow = new BrowserWindow({width:900,height:600,title:'Setup Required',
-      webPreferences:{nodeIntegration:false,contextIsolation:true}});
-    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-    return;
+  const uploadsDir = path.join(app.getPath('userData'), 'uploads');
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+  // preload.js 暴露的 openFile / saveFile IPC 通道
+  ipcMain.handle('dialog:openFile', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile'],
+      filters: [
+        { name: '视频文件', extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi'] },
+        { name: '所有文件', extensions: ['*'] },
+      ],
+    });
+    if (!result.canceled && result.filePaths[0]) {
+      mainWindow.webContents.send('file-opened', result.filePaths[0]);
+      return result.filePaths[0];
+    }
+    return null;
+  });
+
+  ipcMain.handle('dialog:saveFile', async (_event, defaultName) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      defaultPath: defaultName || 'videodna_export',
+    });
+    return result.canceled ? null : result.filePath;
+  });
+
+  const alreadyUp = await isBackendUp();
+  log('isBackendUp ->', alreadyUp);
+  if (!alreadyUp) {
+    startBackend();
+    try {
+      console.log('[electron] Waiting for backend...');
+      await waitForBackend(180, 500);
+      console.log('[electron] Backend ready!');
+      log('Backend ready!');
+    } catch (e) {
+      console.error('[electron] Backend not ready:', e.message);
+      log('Backend NOT ready:', e.message);
+    }
+  } else {
+    console.log('[electron] Backend already running, skip spawn.');
   }
-  startBackend();
-  try { await waitForBackend(); } catch (e) {}
+
   createWindow();
+
+  // 后端无法启动时显示可读错误页，而不是白屏；并每 5 秒自检，
+  // 后端一旦就绪立即自动刷新加载主页面
+  if (!(await isBackendUp())) {
+    log('Backend down at window open, showing recovery page');
+    const errHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Video DNA Analyzer</title></head>
+<body style="background:#0e1017;color:#e2e4ee;font-family:system-ui,'Microsoft YaHei';display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="max-width:520px;text-align:center">
+<h2 style="color:#4f7dff">🧬 Video DNA Analyzer</h2>
+<p style="color:#ffd166;font-size:15px">正在启动分析引擎…</p>
+<p id="msg" style="color:#8a90a0;font-size:13px;line-height:1.8">首次启动需要解压并加载后端组件，大约需要 30~60 秒，请稍候。</p>
+<button onclick="location.reload()" style="background:#4f7dff;border:none;color:#fff;padding:8px 24px;border-radius:6px;cursor:pointer;margin-top:12px">重试</button>
+<script>
+let tries = 0;
+setInterval(() => {
+  fetch('http://127.0.0.1:8000/health', { cache: 'no-store' })
+    .then((r) => { if (r.ok) location.reload(); })
+    .catch(() => {});
+}, 5000);
+</script>
+</div></body></html>`;
+    mainWindow.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(errHtml));
+  } else {
+    log('Backend up at window open');
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -220,7 +313,6 @@ app.on('will-quit', () => {
   if (pythonProcess) {
     console.log('[electron] Killing backend process');
     pythonProcess.kill('SIGTERM');
-    // Force kill after 3 seconds
     setTimeout(() => {
       if (pythonProcess) pythonProcess.kill('SIGKILL');
     }, 3000).unref();

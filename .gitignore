@@ -64,3 +64,21 @@ do_git.py
 fix_*.py
 clean_git.py
 build/
+check_status.py
+check_push.py
+git_push.py
+git_push_final.py
+do_commit_push.py
+do_final_push.py
+final_commit_shutdown.py
+release_upload.py
+git_result.txt
+git_out.txt
+git_log.txt
+git_log2.txt
+
+# Electron build artifacts (repo root)
+app.asar
+electron/dist/
+
+build_log.txt

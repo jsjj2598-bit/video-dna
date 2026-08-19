@@ -12,7 +12,11 @@ files:
   - "electron/**/*"
   - "package.json"
 
-extraResources: []
+# 将 PyInstaller 编译的后端打进安装包（resources/backend.exe）
+# 未编译时删除此段即可；开发模式 main.js 会回退 .venv Python 源码
+extraResources:
+  - from: dist/backend.exe
+    to: backend.exe
 
 win:
   target:

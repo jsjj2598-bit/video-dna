@@ -10,6 +10,7 @@ P5：EDL / FCP7XML / Cutmark JSON 导出（app/exporter.py）。
 from __future__ import annotations
 
 import bisect
+import logging
 import shutil
 import tempfile
 from pathlib import Path
@@ -17,6 +18,9 @@ from pathlib import Path
 from . import audio as old_audio  # 旧版保持向后兼容
 from . import ffmpeg_utils, hpss, shots, speech, transitions
 from .describer import describe_all
+from .. import registry
+
+logger = logging.getLogger(__name__)
 
 
 def _nearest_beat(t: float, beats: list[float], tol: float = 0.15):
@@ -137,22 +141,27 @@ def analyze(
         meta = ffmpeg_utils.probe(str(video_path))
         shots_list = shots.detect_shots(str(video_path), detector=detector)
 
+        comp_on = lambda cid: bool((registry.get_component(cid) or {}).get("enabled"))
+
         # ── 音频分析（HPSS 增强） ──
         wav = None
         if meta.get("audio_codec"):
             wav = ffmpeg_utils.extract_audio(str(video_path), str(work_dir))
             audio_info = hpss.analyze_enhanced(wav)
-            # ASR 台词
-            try:
-                transcript = speech.transcribe(wav)
-                audio_info.update(transcript)
-            except Exception:
-                pass
+            # ASR 台词（组件开关）
+            if comp_on("asr"):
+                try:
+                    transcript = speech.transcribe(wav)
+                    audio_info.update(transcript)
+                except Exception as exc:
+                    logger.warning("ASR 转写失败，降级能量检测: %s", exc)
+            else:
+                audio_info.update(speech.transcribe(wav, use_whisper=False))
         else:
             audio_info = old_audio.empty_audio_info()
 
-        # ── 节拍卡点 ──
-        beats = audio_info.get("beats", [])
+        # ── 节拍卡点（组件开关） ──
+        beats = audio_info.get("beats", []) if comp_on("beats") else []
         aligned_count = 0
         for sh in shots_list:
             aligned, offset = _nearest_beat(sh["start"], beats)
@@ -210,23 +219,52 @@ def analyze(
             for sh in shots_list:
                 sh["keyframe"] = None
 
-        # ── VLM 语义描述（可选） ──
-        if describe_shots and extract_keyframes and shots_list:
+        # ── VLM 语义描述（可选，受组件开关与注册模型控制） ──
+        if describe_shots and comp_on("describer") and extract_keyframes and shots_list:
             frames_dir = work_dir / "frames"
+            vlm_cfg = None
             try:
-                describe_all(
-                    {"shots": shots_list},
-                    frames_dir,
-                    backend=vlm_backend,
-                    model=vlm_model,
-                )
+                vlm_cfg = registry.get_enabled_vision_model()
             except Exception:
-                pass
+                vlm_cfg = None
+            try:
+                if vlm_cfg is not None:
+                    if vlm_cfg["provider"] == "dashscope":
+                        os.environ["DASHSCOPE_API_KEY"] = vlm_cfg["api_key"]
+                    else:
+                        os.environ["OPENAI_API_KEY"] = vlm_cfg["api_key"]
+                    describe_all(
+                        {"shots": shots_list}, frames_dir,
+                        backend=vlm_backend, model=vlm_cfg["model"],
+                        model_cfg=vlm_cfg,
+                    )
+                else:
+                    describe_all(
+                        {"shots": shots_list}, frames_dir,
+                        backend=vlm_backend, model=vlm_model,
+                    )
+            except Exception as exc:
+                logger.warning("镜头语义描述失败（保持未描述状态）: %s", exc)
 
-        # ── 统计 ──
+        # ── 台词翻译（组件开启且配置了 chat 模型时） ──
+        if comp_on("translate") and audio_info.get("text"):
+            try:
+                chat = registry.get_enabled_chat_model()
+                if chat is not None:
+                    audio_info["translation"] = registry.chat_complete(
+                        chat,
+                        [
+                            {"role": "system", "content": "你是专业翻译，将台词翻译为简体中文，保留口语感，按行对应输出。"},
+                            {"role": "user", "content": f"请翻译以下台词：\n{audio_info['text'][:4000]}"},
+                        ],
+                    )
+            except Exception as exc:
+                logger.warning("台词翻译失败: %s", exc)
+
+        # ── 统计与摘要 ──
         avg_shot = (sum(s["duration"] for s in shots_list) / len(shots_list)) if shots_list else 0.0
 
-        return {
+        dna = {
             "meta": {
                 **meta,
                 "total_shots": len(shots_list),
@@ -238,6 +276,35 @@ def analyze(
             "shots": shots_list,
             "summary": _summarize(shots_list, audio_info, beat_ratio, transition_counts),
         }
+
+        # ── 智能摘要（组件开启且配置了 chat 模型时，替换启发式摘要） ──
+        if comp_on("summarize"):
+            try:
+                chat = registry.get_enabled_chat_model()
+                if chat is not None:
+                    dna["summary"] = registry.run_skill(
+                        {
+                            "name": "智能摘要",
+                            "prompt": (
+                                "请基于以下视频剪辑分析数据，生成一段 150 字以内的专业分析摘要，"
+                                "覆盖：整体节奏、转场风格、卡点与音乐、内容亮点、改进建议。\n\n"
+                                "【元信息】{meta}\n【镜头】{shots}\n【音频】{audio}\n【台词】{transcript}"
+                            ),
+                        },
+                        dna,
+                        model_cfg=chat,
+                    )
+                    dna["summary_method"] = "llm"
+            except Exception as exc:
+                logger.warning("智能摘要失败，使用启发式摘要: %s", exc)
+
+        # ── 插件 hooks（on_shots / on_summary） ──
+        try:
+            dna = registry.run_plugin_hooks(dna, {"work_dir": str(work_dir), "video_path": str(video_path)})
+        except Exception as exc:
+            logger.warning("插件执行失败: %s", exc)
+
+        return dna
     finally:
         if not keep_workdir and work_dir.exists():
             shutil.rmtree(work_dir, ignore_errors=True)

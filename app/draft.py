@@ -1,17 +1,19 @@
 """剪映专业版（JianyingPro / CapCut 桌面版）草稿生成器。
 
-把「剪辑方案」（源视频 + 剪切区间列表）打包为一个可在剪映中打开的草稿：
-- draft_content.json：时间线（视频轨 + 音频轨片段）
-- draft_meta_info.json：草稿元信息
-- 使用说明.txt：草稿安装到本机剪映草稿文件夹的方法
+把「剪辑方案」（源视频 + 剪切区间列表）生成一个完整的剪映草稿工程文件夹：
+- {草稿文件夹}/draft_content.json   时间线（视频轨 + 音频轨片段）
+- {草稿文件夹}/draft_meta_info.json 草稿元信息
+- {草稿文件夹}/draft_cover.jpg      草稿封面
+- {草稿文件夹}/{视频副本}            素材视频（保证草稿内包含视频）
 
+剪映草稿即一个文件夹，直接把该文件夹复制到剪映草稿目录即可打开。
 时间单位为微秒（µs），与剪映草稿格式一致。
 """
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
-import zipfile
 from pathlib import Path
 
 DRAFT_VERSION = 1776001
@@ -25,12 +27,12 @@ def _usec(seconds: float) -> int:
     return int(round(seconds * 1_000_000))
 
 
-def build_draft_meta(name: str) -> dict:
+def build_draft_meta(name: str, draft_id: str | None = None) -> dict:
     import time
 
     now_ms = int(time.time() * 1000)
     return {
-        "draft_id": _uuid(),
+        "draft_id": draft_id or _uuid(),
         "draft_name": name,
         "tm_draft_modified": now_ms,
         "tm_draft_create": now_ms,
@@ -54,7 +56,6 @@ def build_draft_content(
     """cuts: [{"start": 0.0, "end": 3.2}, ...] 秒。"""
     path = str(Path(video_path).resolve()).replace("\\", "/")
     media_name = Path(video_path).name
-
     video_material_id = _uuid()
     audio_material_id = _uuid()
     track_id = _uuid()
@@ -199,6 +200,96 @@ def build_draft_content(
     }
 
 
+def _safe_name(name: str) -> str:
+    return "".join(c for c in name if c not in '\\/:*?"<>|').strip() or "videodna"
+
+
+def export_draft_folder(
+    project_name: str,
+    video_path: str,
+    cuts: list[dict],
+    probe_info: dict,
+    out_dir: str | Path,
+) -> str:
+    """生成剪映工程文件夹（非 ZIP），返回草稿文件夹路径。
+
+    结构：
+      {out_dir}/{project_name}/
+        draft_content.json    时间线
+        draft_meta_info.json  元信息
+        draft_cover.jpg       封面
+        {media_name}          视频副本（草稿自带素材，可直接打开）
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    name = _safe_name(project_name or "video_dna_draft")
+    draft_id = _uuid()
+    draft_dir = out_dir / name
+    draft_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1) 复制视频到草稿文件夹内（保证草稿自带视频，打开不会缺素材）
+    src = Path(video_path)
+    media_name = src.name
+    media_dst = draft_dir / media_name
+    if media_dst.resolve() != src.resolve():
+        try:
+            shutil.copy2(src, media_dst)
+        except Exception:
+            media_dst = src
+            media_name = src.name
+    media_path = str(media_dst.resolve()).replace("\\", "/")
+
+    width = int(probe_info.get("resolution", "0x0").split("x")[0] or 0)
+    height = int(probe_info.get("resolution", "0x0").split("x")[1] or 0)
+
+    content = build_draft_content(
+        name=name,
+        video_path=media_path,
+        cuts=cuts,
+        duration=float(probe_info.get("duration") or 0.0),
+        width=width,
+        height=height,
+        fps=float(probe_info.get("fps") or 30.0),
+    )
+    meta = build_draft_meta(name, draft_id=draft_id)
+
+    (draft_dir / "draft_content.json").write_text(
+        json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    (draft_dir / "draft_meta_info.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    # 2) 生成封面（草稿列表中显示）
+    try:
+        from .analyzer import ffmpeg_utils
+
+        cover_time = float(probe_info.get("duration") or 0.0) * 0.2
+        ffmpeg_utils.extract_frame(str(media_dst), cover_time, str(draft_dir / "draft_cover.jpg"))
+    except Exception:
+        pass
+
+    # 3) 说明文件
+    (draft_dir / "使用说明.txt").write_text(
+        (
+            "【Video DNA Analyzer · 剪映草稿使用说明】\n"
+            "\n"
+            "1. 本文件夹就是一个完整的剪映草稿工程（内含视频素材）。\n"
+            "2. 打开剪映专业版 → 右上角「设置」→「全局设置」→ 查看「草稿位置」。\n"
+            "   默认位置（Windows）：\n"
+            "   %LOCALAPPDATA%\\JianyingPro\\User Data\\Projects\\com.lveditor.draft\\\n"
+            "3. 把整个「" + name + "」文件夹复制到上面的草稿位置。\n"
+            "4. 重启剪映（或点击草稿列表的刷新按钮），即可看到并打开该草稿。\n"
+            "\n"
+            "提示：素材视频已内置于草稿文件夹中，无需额外链接。\n"
+        ),
+        encoding="utf-8",
+    )
+
+    return str(draft_dir)
+
+
 def export_draft_zip(
     project_name: str,
     video_path: str,
@@ -206,38 +297,24 @@ def export_draft_zip(
     probe_info: dict,
     out_path: str | Path,
 ) -> str:
-    """生成剪映草稿 ZIP（含两个草稿 JSON + 说明），返回 ZIP 路径。"""
+    """生成剪映草稿 ZIP（含视频素材 + 草稿 JSON），返回 ZIP 路径。"""
+    import tempfile
+    import zipfile
+
     out_path = Path(out_path)
-    name = project_name or "video_dna_draft"
+    name = _safe_name(project_name or "video_dna_draft")
 
-    content = build_draft_content(
-        name=name,
-        video_path=video_path,
-        cuts=cuts,
-        duration=float(probe_info.get("duration") or 0.0),
-        width=int(probe_info.get("resolution", "0x0").split("x")[0] or 0),
-        height=int(probe_info.get("resolution", "0x0").split("x")[1] or 0),
-        fps=float(probe_info.get("fps") or 30.0),
-    )
-    meta = build_draft_meta(name)
-
-    instructions = (
-        "【Video DNA Analyzer · 剪映草稿安装说明】\n"
-        "\n"
-        "1. 解压本压缩包，得到一个文件夹：draft（即你的剪映草稿）。\n"
-        "2. 打开剪映专业版 → 右上角「设置」→「全局设置」→ 查看「草稿位置」。\n"
-        "   默认位置（Windows）：\n"
-        "   %LOCALAPPDATA%\\JianyingPro\\User Data\\Projects\\com.lveditor.draft\\\n"
-        "3. 把解压出来的文件夹复制到上面的草稿位置。\n"
-        "4. 重启剪映（或点击草稿列表的刷新按钮），即可看到并打开该草稿。\n"
-        "\n"
-        "提示：草稿引用的视频文件为：\n"
-        + str(Path(video_path).resolve())
-        + "\n请保持该文件存在。若视频被移动，可在剪映中重新链接素材。\n"
-    )
-
-    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("draft/draft_content.json", json.dumps(content, ensure_ascii=False, indent=2))
-        zf.writestr("draft/draft_meta_info.json", json.dumps(meta, ensure_ascii=False, indent=2))
-        zf.writestr("draft/使用说明.txt", instructions)
+    with tempfile.TemporaryDirectory(prefix="vdna_draft_") as tmp:
+        folder = export_draft_folder(
+            project_name=name,
+            video_path=video_path,
+            cuts=cuts,
+            probe_info=probe_info,
+            out_dir=tmp,
+        )
+        folder_path = Path(folder)
+        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in folder_path.rglob("*"):
+                if f.is_file():
+                    zf.write(f, f"{folder_path.name}/{f.relative_to(folder_path)}")
     return str(out_path)

@@ -30,6 +30,18 @@
   --shadow: 0 8px 30px rgba(0,0,0,.35);
   --sidebar: 236px;
   --header: 56px;
+  --bg-glow-1: rgba(109,93,246,.12);
+  --bg-glow-2: rgba(56,189,248,.08);
+}
+html[data-theme="light"]{
+  --bg:#f5f6fb;--bg-soft:#eceef6;--panel:#ffffff;--panel-2:#f2f4fb;--panel-3:#e8ebf5;
+  --border:rgba(15,23,42,.09);--border-2:rgba(15,23,42,.16);
+  --fg:#1a2033;--fg-2:#5a6075;--fg-3:#98a0b5;
+  --shadow:0 8px 30px rgba(30,40,90,.10);
+  --bg-glow-1:rgba(109,93,246,.10);--bg-glow-2:rgba(56,189,248,.08);
+}
+html[data-theme="oled"]{
+  --bg:#000000;--bg-soft:#05070d;--panel:#0a0d14;--panel-2:#0e1320;--panel-3:#141b2e;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
@@ -38,8 +50,8 @@ body{
   background:var(--bg);color:var(--fg);display:flex;overflow:hidden;
   -webkit-font-smoothing:antialiased;
   background-image:
-    radial-gradient(1000px 600px at 85% -10%, rgba(109,93,246,.12), transparent 60%),
-    radial-gradient(800px 500px at -10% 110%, rgba(56,189,248,.08), transparent 60%);
+    radial-gradient(1000px 600px at 85% -10%, var(--bg-glow-1), transparent 60%),
+    radial-gradient(800px 500px at -10% 110%, var(--bg-glow-2), transparent 60%);
 }
 ::selection{background:rgba(109,93,246,.4);}
 ::-webkit-scrollbar{width:10px;height:10px;}
@@ -336,8 +348,25 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
 .progress-fill{height:100%;width:0%;background:linear-gradient(90deg,#6d5df6,#38bdf8);border-radius:3px;transition:width .3s;}
 
 /* Video */
-.video-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;}
+.video-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:20px;position:relative;}
 .video-card video{width:100%;display:block;max-height:400px;background:#000;}
+.video-mini{display:inline-block;width:300px;max-width:100%;}
+.video-mini video{width:100%;display:block;max-height:300px;background:#000;aspect-ratio:16/9;object-fit:contain;}
+.video-mini .vm-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border);font-size:11px;color:var(--fg-2);}
+.video-mini .vm-bar .vm-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--fg);}
+
+/* ── 思考过程（AI 推理日志） ── */
+.think-panel{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:20px;}
+.think-panel h3{font-size:13.5px;font-weight:650;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.think-logs{background:var(--bg-soft);border:1px solid var(--border);border-radius:10px;padding:12px 14px;max-height:260px;overflow-y:auto;font-size:12px;line-height:1.7;}
+.think-log{display:flex;gap:8px;align-items:baseline;padding:2px 0;animation:fade .2s ease;}
+.think-log .tl-time{color:var(--fg-3);font-size:10.5px;flex-shrink:0;font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',monospace;}
+.think-log .tl-stage{color:var(--accent-3);font-size:10.5px;flex-shrink:0;font-weight:700;width:66px;}
+.think-log .tl-msg{color:var(--fg-2);}
+.think-log.done .tl-msg{color:var(--green);}
+.think-log.error .tl-msg{color:var(--red);}
+.think-log.current .tl-msg{color:var(--fg);}
+.think-log.current .tl-stage::after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--green);margin-left:4px;vertical-align:2px;animation:pulse 1.2s infinite;}
 
 /* Settings */
 .settings-group{margin-bottom:22px;}
@@ -359,6 +388,29 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
 .history-item .hi-del{cursor:pointer;color:var(--fg-3);font-size:16px;line-height:1;padding:4px;border-radius:6px;}
 .history-item .hi-del:hover{color:var(--red);background:rgba(248,113,113,.1);}
 .empty-state{text-align:center;padding:36px 20px;color:var(--fg-3);font-size:12.5px;border:1px dashed var(--border-2);border-radius:var(--radius);background:rgba(255,255,255,.015);}
+
+/* ── AI 创作中心 ── */
+.studio-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-bottom:8px;}
+.studio-tpl{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:16px;transition:all .2s;cursor:pointer;position:relative;overflow:hidden;}
+.studio-tpl:hover{border-color:var(--border-2);box-shadow:var(--shadow);transform:translateY(-2px);}
+.studio-tpl .st-icon{font-size:26px;display:block;margin-bottom:8px;}
+.studio-tpl .st-name{font-size:13.5px;font-weight:650;margin-bottom:4px;}
+.studio-tpl .st-desc{font-size:11.5px;color:var(--fg-2);line-height:1.55;margin-bottom:10px;min-height:52px;}
+.studio-tpl .st-meta{display:flex;gap:6px;flex-wrap:wrap;}
+.studio-tpl .st-meta .badge{font-size:9.5px;}
+.studio-row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.studio-row .field{flex:1;min-width:200px;}
+.studio-card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin-bottom:16px;}
+.studio-card h3{font-size:14px;font-weight:650;margin-bottom:12px;display:flex;align-items:center;gap:8px;}
+.sb-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;}
+.sb-table th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--fg-3);padding:7px 10px;border-bottom:1px solid var(--border);background:var(--bg-soft);}
+.sb-table td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--fg-2);}
+.bgm-box{display:flex;gap:14px;align-items:center;flex-wrap:wrap;}
+.bgm-box .bgm-mood{font-size:15px;font-weight:700;background:linear-gradient(135deg,#f472b6,#a78bfa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.theme-dots{display:flex;gap:8px;align-items:center;}
+.theme-dot{width:26px;height:26px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:all .15s;flex-shrink:0;}
+.theme-dot:hover{transform:scale(1.12);}
+.theme-dot.active{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.15);}
 
 @media(max-width:820px){
   :root{--sidebar:0px}
@@ -392,6 +444,9 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
     </div>
     <div class="nav-item" onclick="switchTab('history',this)">
       <span class="icon-tile">📋</span> 历史记录
+    </div>
+    <div class="nav-item" onclick="switchTab('studio',this)">
+      <span class="icon-tile">✨</span> AI 创作
     </div>
     <div class="nav-section">系统</div>
     <div class="nav-item" onclick="switchTab('settings',this)">
@@ -473,10 +528,52 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
       <!-- ═══ History ═══ -->
       <div class="tab-panel" id="tab-history">
         <div class="section-header">
-          <h3>📋 分析历史 <small>保存在本地浏览器</small></h3>
+          <h3>📋 分析历史 <small>完整结果可回看</small></h3>
           <button class="btn btn-sm btn-danger" onclick="clearHistory()">清空</button>
         </div>
         <div id="historyList"></div>
+      </div>
+
+      <!-- ═══ AI 创作 ═══ -->
+      <div class="tab-panel" id="tab-studio">
+        <div class="comp-hero">
+          <span class="icon">✨</span>
+          <div>
+            <h3>AI 创作中心</h3>
+            <p>AI 视频平台的通用创作能力：节奏模板一键套用、AI 分镜脚本、BGM 风格推荐。选好模板后上传自己的视频即可生成剪映草稿。</p>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h3>🎛️ 节奏模板库 <small>AI 视频平台模板中心能力</small></h3>
+        </div>
+        <div class="studio-grid" id="studioTpls"></div>
+
+        <div class="section-header" style="margin-top:8px">
+          <h3>📝 AI 分镜脚本</h3>
+          <button class="btn btn-primary btn-sm" onclick="genStoryboard()">✨ 生成分镜脚本</button>
+        </div>
+        <div class="studio-card">
+          <div class="studio-row">
+            <div class="field">
+              <label>主题 / 文案</label>
+              <textarea id="sbTopic" style="min-height:70px" placeholder="例如：夏日海边旅行 Vlog，记录冲浪和日落"></textarea>
+            </div>
+            <div class="field" style="max-width:140px">
+              <label>镜头数</label>
+              <input type="number" id="sbCount" value="6" min="3" max="20">
+            </div>
+          </div>
+          <div id="sbResult" style="font-size:12px;color:var(--fg-3)">输入主题后点击「生成分镜脚本」，AI 将输出分镜表格（未配置对话模型时使用内置框架）。</div>
+        </div>
+
+        <div class="section-header" style="margin-top:8px">
+          <h3>🎵 BGM 风格推荐</h3>
+          <button class="btn btn-primary btn-sm" onclick="recommendBgm()">💡 按分析结果推荐</button>
+        </div>
+        <div class="studio-card">
+          <div id="bgmResult" style="font-size:12px;color:var(--fg-3)">先分析一个视频，再点击「按分析结果推荐」获取匹配的 BGM 风格与搜索关键词。</div>
+        </div>
       </div>
 
       <!-- ═══ Settings ═══ -->
@@ -524,6 +621,35 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
                 <option value="srt">SRT 字幕</option>
                 <option value="all">全部 (ZIP)</option>
               </select>
+            </div>
+            <div class="setting-row">
+              <label>文件下载目录 <span class="hint">剪映草稿、导出文件保存的位置</span></label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="text" id="setDownloadDir" placeholder="如 D:\VideoDNA 输出" style="width:260px">
+                <button class="btn btn-sm" onclick="pickDownloadDir()">📁 浏览</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <h3>外观主题</h3>
+            <div class="setting-row">
+              <label>主题模式 <span class="hint">深色 / 浅色 / OLED 纯黑</span></label>
+              <select id="setTheme" onchange="applyTheme()">
+                <option value="dark">深色（默认）</option>
+                <option value="light">浅色</option>
+                <option value="oled">OLED 纯黑</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label>强调色 <span class="hint">界面主色调</span></label>
+              <div class="theme-dots" id="themeDots">
+                <div class="theme-dot active" data-c="#6d5df6" style="background:#6d5df6" title="紫罗兰"></div>
+                <div class="theme-dot" data-c="#0ea5e9" style="background:#0ea5e9" title="天空蓝"></div>
+                <div class="theme-dot" data-c="#10b981" style="background:#10b981" title="翡翠绿"></div>
+                <div class="theme-dot" data-c="#f43f5e" style="background:#f43f5e" title="玫瑰红"></div>
+                <div class="theme-dot" data-c="#f59e0b" style="background:#f59e0b" title="琥珀橙"></div>
+                <div class="theme-dot" data-c="#ec4899" style="background:#ec4899" title="品红"></div>
+              </div>
             </div>
           </div>
           <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
@@ -652,11 +778,12 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
 <!-- Toast / Progress -->
 <div class="toast-container" id="toastContainer"></div>
 <div class="progress" id="progressOverlay">
-  <div class="progress-box">
+  <div class="progress-box" style="max-width:560px">
     <div class="spinner"></div>
     <div class="p-status" id="pStatus">正在分析...</div>
     <div class="p-sub" id="pSub">请稍候</div>
     <div class="progress-track"><div class="progress-fill" id="pFill"></div></div>
+    <div class="think-logs" id="thinkLogs" style="margin-top:16px;text-align:left;max-height:220px;display:none"></div>
   </div>
 </div>
 <script>
@@ -666,6 +793,7 @@ let currentFile = null;
 let currentCuts = null;       // 套用模板后的剪辑方案
 let currentTemplateName = ''; // 模板来源（示例视频名）
 let appliedVideoFile = null;  // 套用模板时上传的自己视频
+let currentSessionId = null;  // 当前分析 session（历史/草稿/思考过程）
 let compState = { components:[], models:[], plugins:[], skills:[] };
 
 // ── Tab Switching ──
@@ -674,12 +802,13 @@ function switchTab(name, el) {
   document.getElementById('tab-' + name).classList.add('active');
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   if (el) el.classList.add('active');
-  const titles = {analyze:'视频分析',components:'AI 组件',history:'历史记录',settings:'设置',about:'关于'};
-  const breads = {analyze:'上传视频并提取剪辑 DNA',components:'管理模型 / 插件 / 技能',history:'查看以往分析',settings:'配置引擎和行为',about:'版本和项目信息'};
+  const titles = {analyze:'视频分析',components:'AI 组件',history:'历史记录',studio:'AI 创作',settings:'设置',about:'关于'};
+  const breads = {analyze:'上传视频并提取剪辑 DNA',components:'管理模型 / 插件 / 技能',history:'完整结果可回看',studio:'模板 / 分镜 / BGM 创作',settings:'配置引擎和行为',about:'版本和项目信息'};
   document.getElementById('pageTitle').textContent = titles[name] || 'Video DNA';
   document.getElementById('breadcrumb').textContent = breads[name] || '';
   if (name === 'components') loadComponents();
   if (name === 'history') renderHistory();
+  if (name === 'studio') loadStudio();
 }
 
 // ── Upload ──
@@ -739,8 +868,12 @@ function saveSettings() {
     openai_key: document.getElementById('setOpenAIKey').value,
     qwen_key: document.getElementById('setQwenKey').value,
     export_fmt: document.getElementById('setExportFmt').value,
+    download_dir: document.getElementById('setDownloadDir').value.trim(),
+    theme: document.getElementById('setTheme').value,
+    accent: getSettings().accent || '#6d5df6',
   };
   localStorage.setItem('vdna_settings', JSON.stringify(s));
+  applyTheme();
   toast('✅ 设置已保存', 'success');
 }
 function loadSettings() {
@@ -750,7 +883,49 @@ function loadSettings() {
   document.getElementById('setOpenAIKey').value = s.openai_key || '';
   document.getElementById('setQwenKey').value = s.qwen_key || '';
   document.getElementById('setExportFmt').value = s.export_fmt || 'cutmark';
+  document.getElementById('setDownloadDir').value = s.download_dir || '';
+  document.getElementById('setTheme').value = s.theme || 'dark';
+  applyTheme();
 }
+function applyTheme() {
+  const s = getSettings();
+  const theme = document.getElementById('setTheme') ? document.getElementById('setTheme').value : (s.theme || 'dark');
+  const accent = s.accent || '#6d5df6';
+  document.documentElement.setAttribute('data-theme', theme);
+  document.documentElement.style.setProperty('--accent', accent);
+  document.documentElement.style.setProperty('--accent-2', accent);
+  // 主色变体（浅化用于渐变尾端）
+  const lighten = (hex, f) => {
+    const n = parseInt(hex.slice(1), 16);
+    const r = Math.min(255, Math.round(((n >> 16) & 255) + (255 - ((n >> 16) & 255)) * f));
+    const g = Math.min(255, Math.round(((n >> 8) & 255) + (255 - ((n >> 8) & 255)) * f));
+    const b = Math.min(255, Math.round((n & 255) + (255 - (n & 255)) * f));
+    return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
+  };
+  document.documentElement.style.setProperty('--accent-3', lighten(accent, 0.45));
+  document.querySelectorAll('.theme-dot').forEach(d => d.classList.toggle('active', d.dataset.c === accent));
+  const logo = document.querySelector('.sidebar-brand .logo');
+  if (logo) logo.style.background = 'linear-gradient(135deg,' + accent + ',' + lighten(accent, 0.45) + ')';
+  const navActive = document.querySelector('.nav-item.active .icon-tile');
+  if (navActive) navActive.style.background = 'linear-gradient(135deg,' + accent + ',' + lighten(accent, 0.3) + ')';
+}
+function pickDownloadDir() {
+  if (window.electronAPI && window.electronAPI.openDirectory) {
+    window.electronAPI.openDirectory().then(dir => { if (dir) document.getElementById('setDownloadDir').value = dir; });
+  } else {
+    toast('⚠️ 请在桌面版中选择目录（浏览器模式请手动输入路径）', 'info');
+  }
+}
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.theme-dot').forEach(dot => {
+    dot.addEventListener('click', () => {
+      const s = getSettings();
+      s.accent = dot.dataset.c;
+      localStorage.setItem('vdna_settings', JSON.stringify(s));
+      applyTheme();
+    });
+  });
+});
 
 // ── History ──
 function getHistory() { try { return JSON.parse(localStorage.getItem('vdna_history'))||[]; } catch { return []; } }
@@ -760,19 +935,42 @@ function addHistory(name, result) {
   if (h.length > 30) h.length = 30;
   localStorage.setItem('vdna_history', JSON.stringify(h));
 }
-function renderHistory() {
-  const h = getHistory();
+async function renderHistory() {
   const el = document.getElementById('historyList');
-  if (!h.length) { el.innerHTML = '<div class="history-empty">暂无历史记录，去分析一支视频吧 🎬</div>'; return; }
-  el.innerHTML = h.map(i => `
-    <div class="history-item" onclick="toast('📋 历史仅保存摘要，请重新上传分析','info')">
-      <span class="hi-ico">🎬</span>
-      <span class="hi-name">${esc(i.name)}</span>
-      <span class="hi-count">${i.total_shots} 镜头</span>
-      <span class="hi-time">${i.time}</span>
-      <span class="hi-del" onclick="event.stopPropagation();delHistory(${i.id})">×</span>
-    </div>
-  `).join('');
+  let serverItems = [];
+  try {
+    const res = await fetch('/api/history');
+    if (res.ok) serverItems = (await res.json()).items || [];
+  } catch (_) {}
+  const h = getHistory();
+  if (!h.length && !serverItems.length) { el.innerHTML = '<div class="history-empty">暂无历史记录，去分析一支视频吧 🎬</div>'; return; }
+  const rows = [];
+  serverItems.forEach(i => {
+    rows.push(`
+      <div class="history-item" onclick="openHistory('${i.session_id}')" title="点击回看完整分析结果">
+        <span class="hi-ico">🎬</span>
+        <span class="hi-name">${esc(i.name)}</span>
+        <span class="hi-count">${i.total_shots} 镜头${i.has_video ? ' · 🎥' : ''}</span>
+        <span class="hi-time">${i.time}</span>
+        <span class="hi-del" onclick="event.stopPropagation();delServerHistory('${i.session_id}')">×</span>
+      </div>
+    `);
+  });
+  if (!serverItems.length && h.length) {
+    rows.push('<div class="empty-state" style="margin:10px 0">本地旧记录仅含摘要，重新分析后可完整回看</div>');
+  }
+  h.forEach(i => {
+    rows.push(`
+      <div class="history-item" onclick="toast('⚠️ 该旧记录仅含摘要，请重新上传分析后可完整回看','info')">
+        <span class="hi-ico">📋</span>
+        <span class="hi-name">${esc(i.name)}</span>
+        <span class="hi-count">${i.total_shots} 镜头</span>
+        <span class="hi-time">${i.time}</span>
+        <span class="hi-del" onclick="event.stopPropagation();delHistory(${i.id})">×</span>
+      </div>
+    `);
+  });
+  el.innerHTML = rows.join('');
 }
 function delHistory(id) {
   let h = getHistory();
@@ -781,10 +979,39 @@ function delHistory(id) {
   renderHistory();
   toast('🗑️ 已删除', 'info');
 }
-function clearHistory() {
+async function delServerHistory(sid) {
+  if (!confirm('删除该历史记录？')) return;
+  try {
+    const res = await fetch('/api/history/' + sid, { method: 'DELETE' });
+    if (!res.ok) throw new Error(res.statusText);
+    renderHistory();
+    toast('🗑️ 已删除', 'info');
+  } catch(e) { toast('❌ 删除失败: '+e.message, 'error'); }
+}
+async function clearHistory() {
+  if (!confirm('清空全部历史记录？')) return;
+  try { await fetch('/api/history', { method: 'DELETE' }); } catch (_) {}
   localStorage.removeItem('vdna_history');
   renderHistory();
   toast('🗑️ 全部清空', 'info');
+}
+async function openHistory(sid) {
+  showP('正在加载历史记录...', '');
+  try {
+    const res = await fetch('/api/history/' + sid);
+    if (!res.ok) throw new Error((await res.json()).detail || res.statusText);
+    const data = await res.json();
+    hideP();
+    currentResult = data;
+    currentCuts = null; currentTemplateName = ''; appliedVideoFile = null;
+    currentSessionId = data._session_id || sid;
+    renderResult(data, null, { history: true });
+    switchTab('analyze', document.querySelector('.nav-item'));
+    toast('📋 已载入历史：' + (data._source_file || '视频'), 'success');
+  } catch (err) {
+    hideP();
+    toast('❌ ' + err.message, 'error');
+  }
 }
 function esc(s) { if (s === null || s === undefined) return ''; const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 
@@ -796,11 +1023,16 @@ async function uploadFile(f) {
   const maxSize = 500 * 1024 * 1024;
   if (f.size > maxSize) { toast('❌ 文件过大，最大 500MB', 'error'); return; }
 
+  // 生成会话 ID 用于轮询思考过程
+  currentSessionId = 'sid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+
   showP('正在上传...', f.name);
   updateP(10);
+  addThink('upload', 5, '上传视频：' + f.name);
 
   const fd = new FormData();
   fd.append('file', f);
+  fd.append('session_id', currentSessionId);
   const s = getSettings();
   const params = new URLSearchParams();
   if (s.detector) params.set('detector', s.detector);
@@ -809,17 +1041,15 @@ async function uploadFile(f) {
   if (s.qwen_key) fd.append('qwen_key', s.qwen_key);
 
   try {
-    updateP(15, '正在分析镜头结构...');
     const res = await fetch('/api/analyze?'+params.toString(), { method:'POST', body:fd });
-    updateP(40, '正在分析音频与节拍...');
     if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.detail || res.statusText); }
-    updateP(60, '正在语义描述与智能分析...');
-    const data = await res.json();
-    updateP(85, '正在生成摘要...');
+    await waitAnalysis();
+    const data = await fetch('/api/result/' + currentSessionId).then(r => r.json());
+    currentResult = data;
+    data._session_id = currentSessionId;
     addHistory(f.name, data);
     updateP(100, '分析完成！');
     setTimeout(hideP, 500);
-    currentResult = data;
     renderResult(data, f);
     toast('✅ 分析完成！共 ' + (data.meta?.total_shots||0) + ' 个镜头', 'success');
   } catch (err) {
@@ -828,15 +1058,115 @@ async function uploadFile(f) {
   }
 }
 
+// ── 思考过程（任务3：分析时展示 AI 推理日志） ──
+let _thinkTimer = null;
+function addThink(stage, pct, msg, state) {
+  const box = document.getElementById('thinkLogs');
+  if (!box) return;
+  box.style.display = 'block';
+  const row = document.createElement('div');
+  row.className = 'think-log ' + (state || '') + (stage === 'done' ? ' done' : '') + (stage === 'error' ? ' error' : '');
+  row.innerHTML = '<span class="tl-time">' + new Date().toLocaleTimeString('zh-CN') + '</span><span class="tl-stage">' + esc(stage) + '</span><span class="tl-msg">' + esc(msg) + '</span>';
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+function setCurrentThink(stage, msg) {
+  const box = document.getElementById('thinkLogs');
+  if (!box) return;
+  const rows = box.querySelectorAll('.think-log');
+  rows.forEach(r => { r.classList.remove('current'); if (r.dataset.stage === 'done') r.classList.remove('current'); });
+  const row = document.createElement('div');
+  row.className = 'think-log current';
+  row.dataset.stage = stage;
+  row.innerHTML = '<span class="tl-time">' + new Date().toLocaleTimeString('zh-CN') + '</span><span class="tl-stage">' + esc(stage) + '</span><span class="tl-msg">' + esc(msg) + '</span>';
+  box.appendChild(row);
+  box.scrollTop = box.scrollHeight;
+}
+async function waitAnalysis() {
+  return new Promise((resolve, reject) => {
+    let lastPct = -1;
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/progress/' + currentSessionId);
+        if (!res.ok) { setTimeout(poll, 800); return; }
+        const p = await res.json();
+        const pct = p.pct || 0;
+        if (pct !== lastPct || p.stage === 'done' || p.stage === 'error') {
+          lastPct = pct;
+          updateP(pct, '正在分析...', p.logs && p.logs.length ? p.logs[p.logs.length - 1].msg : '');
+          if (p.logs && p.logs.length) {
+            const box = document.getElementById('thinkLogs');
+            if (box) {
+              // 增量渲染日志
+              const existing = box.querySelectorAll('.think-log').length;
+              const fresh = p.logs.slice(existing);
+              fresh.forEach(l => {
+                const row = document.createElement('div');
+                row.className = 'think-log ' + (l.stage === 'done' ? 'done' : '') + (l.stage === 'error' ? 'error' : '');
+                row.innerHTML = '<span class="tl-time">' + esc(l.t) + '</span><span class="tl-stage">' + esc(l.stage) + '</span><span class="tl-msg">' + esc(l.msg) + '</span>';
+                box.appendChild(row);
+              });
+              box.scrollTop = box.scrollHeight;
+            }
+          }
+        }
+        if (p.done) {
+          if (p.stage === 'error') reject(new Error((p.logs && p.logs.length ? p.logs[p.logs.length - 1].msg : '分析失败')));
+          else resolve();
+          return;
+        }
+        setTimeout(poll, 800);
+      } catch (e) { setTimeout(poll, 800); }
+    };
+    poll();
+  });
+}
+
 // ── 模板套用：自己的视频按示例视频的节奏生成剪辑方案 ──
 function pickTemplateVideo() {
   document.getElementById('templateInput').click();
 }
 document.getElementById('templateInput').addEventListener('change', () => {
   const f = document.getElementById('templateInput').files[0];
-  if (f) applyTemplate(f);
+  const tplId = document.getElementById('templateInput').dataset.tpl;
+  document.getElementById('templateInput').dataset.tpl = '';
   document.getElementById('templateInput').value = '';
+  if (f) {
+    if (tplId) applyAiTemplate(f, tplId);
+    else applyTemplate(f);
+  }
 });
+
+async function applyAiTemplate(f, tplId) {
+  showP('正在上传你的视频...', f.name);
+  updateP(10);
+  const fd = new FormData();
+  fd.append('file', f);
+  fd.append('template', tplId);
+  const s = getSettings();
+  const params = new URLSearchParams();
+  if (s.detector) params.set('detector', s.detector);
+  if (s.backend) params.set('backend', s.backend);
+  try {
+    updateP(20, '正在分析你的视频结构...');
+    const res = await fetch('/api/ai/apply?' + params.toString(), { method: 'POST', body: fd });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || res.statusText); }
+    const data = await res.json();
+    updateP(90, '正在生成剪辑方案...');
+    currentResult = data.analysis;
+    currentSessionId = data.analysis._session_id || null;
+    currentCuts = data.cut_plan.cuts;
+    currentTemplateName = data.template ? data.template.name : '节奏模板';
+    appliedVideoFile = f;
+    updateP(100, '完成！');
+    setTimeout(hideP, 500);
+    renderResult(data.analysis, f, { cutPlan: data.cut_plan });
+    toast('✅ 模板已套用：' + (data.template ? data.template.name : '') + ' · ' + data.cut_plan.total + ' 个镜头 · ' + data.cut_plan.beat_aligned_count + ' 个卡点', 'success');
+  } catch (err) {
+    hideP();
+    toast('❌ ' + err.message, 'error');
+  }
+}
 
 async function applyTemplate(f) {
   if (!currentResult || !currentResult.shots || !currentResult.shots.length) {
@@ -859,6 +1189,7 @@ async function applyTemplate(f) {
     const data = await res.json();
     updateP(90, '正在生成剪辑方案...');
     currentResult = data.analysis;
+    currentSessionId = data.analysis._session_id || null;
     currentCuts = data.cut_plan.cuts;
     currentTemplateName = currentResult.meta?.source_file || '示例视频';
     appliedVideoFile = f;
@@ -872,44 +1203,49 @@ async function applyTemplate(f) {
   }
 }
 
-// ── 下载剪映草稿 ──
+// ── 下载剪映草稿（任务5/7：剪映工程文件夹格式，含视频；任务6：自定义下载目录） ──
 async function downloadDraft() {
   if (!currentCuts || !currentCuts.length) { toast('❌ 请先套用模板生成剪辑方案', 'error'); return; }
   try {
     toast('⏳ 正在生成剪映草稿...', 'info');
+    const s = getSettings();
+    const body = { project_name: 'VideoDNA剪辑方案', cuts: currentCuts };
+    if (currentSessionId) body.session_id = currentSessionId;
+    if (s.download_dir) body.download_dir = s.download_dir;
     const res = await fetch('/api/draft/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project_name: 'VideoDNA剪辑方案', cuts: currentCuts }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || res.statusText); }
-    const blob = await res.blob();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'VideoDNA剪辑方案_剪映草稿.zip';
-    a.click();
-    URL.revokeObjectURL(a.href);
-    showDraftHelp();
+    const data = await res.json();
+    showDraftHelp(data.path);
   } catch (err) {
     toast('❌ ' + err.message, 'error');
   }
 }
 
-function showDraftHelp() {
-  const path = 'C:\\Users\\' + (navigator.userAgent.includes('Windows') ? '%用户名%' : '') + '\\AppData\\Local\\JianyingPro\\User Data\\Projects\\com.lveditor.draft';
+function showDraftHelp(folderPath) {
+  const path = folderPath || '（下载目录）';
   const help = [
-    '📦 剪映草稿已下载！安装步骤：',
-    '1. 解压 ZIP，得到「draft」文件夹',
-    '2. 打开剪映专业版 → 设置 → 全局设置 → 查看「草稿位置」',
+    '📦 剪映草稿已生成（剪映工程文件格式，非压缩包）：',
+    '',
+    '保存位置：',
+    path,
+    '',
+    '草稿文件夹内已包含：draft_content.json（时间线）、draft_meta_info.json（元信息）、draft_cover.jpg（封面）以及视频素材副本，可直接打开。',
+    '',
+    '使用步骤：',
+    '1. 打开剪映专业版 → 设置 → 全局设置 → 查看「草稿位置」',
     '   默认：%LOCALAPPDATA%\\JianyingPro\\User Data\\Projects\\com.lveditor.draft\\',
-    '3. 把解压的文件夹复制到该目录',
-    '4. 重启剪映（或刷新草稿列表），即可打开草稿查看剪辑方案',
+    '2. 把整个「VideoDNA剪辑方案」文件夹复制到该目录',
+    '3. 重启剪映（或刷新草稿列表），即可打开草稿查看剪辑方案',
   ].join('\n');
   const modal = document.getElementById('draftHelpModal') || (() => {
     const div = document.createElement('div');
     div.id = 'draftHelpModal';
     div.className = 'modal-overlay active';
-    div.innerHTML = '<div class="modal"><div class="modal-head"><h3>📦 剪映草稿安装</h3><button class="modal-x" onclick="this.closest(\'.modal-overlay\').remove()">×</button></div><div class="modal-body"><pre id="draftHelpText" style="white-space:pre-wrap;line-height:1.9;color:var(--fg-2);font-size:13px;margin:0"></pre></div><div class="modal-foot"><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">知道了</button></div></div>';
+    div.innerHTML = '<div class="modal"><div class="modal-head"><h3>📦 剪映草稿已生成</h3><button class="modal-x" onclick="this.closest(\'.modal-overlay\').remove()">×</button></div><div class="modal-body"><pre id="draftHelpText" style="white-space:pre-wrap;line-height:1.9;color:var(--fg-2);font-size:13px;margin:0"></pre></div><div class="modal-foot"><button class="btn" onclick="openDraftFolder(\'' + (folderPath || '') + '\')">📁 打开文件夹</button><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">知道了</button></div></div>';
     document.body.appendChild(div);
     return div;
   })();
@@ -917,16 +1253,26 @@ function showDraftHelp() {
   modal.querySelector('#draftHelpText').textContent = help;
 }
 
+function openDraftFolder(path) {
+  if (!path) return;
+  if (window.electronAPI && window.electronAPI.showInFolder) {
+    window.electronAPI.showInFolder(path);
+  } else {
+    toast('⚠️ 请手动打开目录：' + path, 'info', 6000);
+  }
+}
+
 // ── Render ──
 function renderResult(d, file, opts) {
   opts = opts || {};
-  const cutPlan = opts.cutPlan || null;
+  let cutPlan = opts.cutPlan || null;
   const m = d.meta || {};
   const a = d.audio || {};
   const shots = d.shots || [];
   const sr = a.speech_regions || [];
   const palette = ['#6d5df6','#4f7dff','#38bdf8','#34d399','#fbbf24','#f472b6','#22d3ee','#a78bfa'];
   const total = m.duration || 1;
+  const frameBase = d._frame_base || '/api/frames/';
 
   const sceneTypes = {}; let faceTotal=0, emotions={}, described=0;
   shots.forEach(s => {
@@ -947,9 +1293,14 @@ function renderResult(d, file, opts) {
 
   let videoUrl = '';
   if (file) videoUrl = URL.createObjectURL(file);
+  else if (d._video_url) videoUrl = d._video_url;
+  // 历史记录：恢复保存的剪辑方案（任务4 完整回看）
+  if (!cutPlan && d._cut_plan && d._cut_plan.cuts && d._cut_plan.cuts.length) {
+    cutPlan = d._cut_plan;
+  }
 
   document.getElementById('resultArea').innerHTML = `
-    ${videoUrl ? `<div class="video-card"><video id="videoEl" src="${videoUrl}" controls preload="metadata" poster="/api/frames/${shots[0]?.keyframe||''}"></video></div>` : ''}
+    ${videoUrl ? `<div class="video-mini video-card"><video id="videoEl" src="${videoUrl}" controls preload="metadata" poster="${frameBase}${shots[0]?.keyframe||''}"></video><div class="vm-bar"><span class="vm-title">🎬 ${esc(d._source_file || '视频')}</span><span>${m.duration ? m.duration.toFixed(1)+'s' : ''} · ${m.resolution||''}</span></div></div>` : ''}
 
     <div class="stats-row">
       <div class="stat-tile"><div class="num">${m.total_shots||0}</div><div class="lbl">🎬 镜头总数</div></div>
@@ -1021,14 +1372,15 @@ function renderResult(d, file, opts) {
     </div>
   `;
 
-  // ── Film Strip Timeline ──
+  // ── Film Strip Timeline（任务1：时间轴与原视频时长对齐） ──
   const fs = document.getElementById('fs');
   const preview = document.getElementById('fsPreview');
   const pvImg = preview.querySelector('img');
   const pvTitle = preview.querySelector('.pv-title');
   const pvDesc = preview.querySelector('.pv-desc');
   const PX = 46; // 每秒像素宽度
-  const totalDur = shots.reduce((a, s) => a + s.duration, 0) || m.duration || 1;
+  // 时间轴总长 = 视频实际时长（而非镜头时长之和），保证分镜与原视频时间轴对齐
+  const totalDur = m.duration || 1;
   const fsW = Math.max(totalDur * PX, fs.clientWidth || 800);
   fs.style.width = fsW + 'px';
 
@@ -1039,7 +1391,7 @@ function renderResult(d, file, opts) {
     el.style.left = (s.start * PX) + 'px';
     el.style.width = Math.max(s.duration * PX - 2, 10) + 'px';
     const img = document.createElement('img');
-    img.src = '/api/frames/' + (s.keyframe || '');
+    img.src = frameBase + (s.keyframe || '');
     img.onerror = () => img.style.display = 'none';
     const lbl = document.createElement('span');
     lbl.className = 'fs-label';
@@ -1057,7 +1409,7 @@ function renderResult(d, file, opts) {
   sr.forEach(r => { const el = document.createElement('div'); el.className = 'fs-speech'; el.style.left = (r.start * PX) + 'px'; el.style.width = Math.max((r.end - r.start) * PX - 1, 6) + 'px'; el.title = (r.text || '语音') + ' [' + r.start.toFixed(1) + 's→' + r.end.toFixed(1) + 's]'; fs.appendChild(el); });
 
   function showPreview(s, e, el) {
-    pvImg.src = '/api/frames/' + (s.keyframe || '');
+    pvImg.src = frameBase + (s.keyframe || '');
     pvTitle.textContent = '镜头 ' + (el ? el.dataset.idx : '') + ' · ' + s.start.toFixed(1) + 's→' + s.end.toFixed(1) + 's · ' + s.duration.toFixed(1) + 's' + (s.transition ? ' · ' + s.transition : '');
     pvDesc.textContent = (s.content || '') + (s.transcript ? ' 🎤' + s.transcript : '');
     const fsRect = fs.getBoundingClientRect();
@@ -1090,7 +1442,7 @@ function renderResult(d, file, opts) {
     if (s.color_tone) tags += '<span class="tag">🎨 ' + s.color_tone + '</span>';
     card.title = '点击跳转到该镜头 (' + s.start.toFixed(1) + 's)';
     card.innerHTML = `
-      <img src="/api/frames/${s.keyframe || ''}" alt="" loading="lazy" onerror="this.style.display='none'">
+      <img src="${frameBase}${s.keyframe || ''}" alt="" loading="lazy" onerror="this.style.display='none'">
       <div class="shot-body">
         <div><span class="sn">镜头 ${i}</span><span class="sd">${s.duration.toFixed(1)}s</span></div>
         <div class="shot-tags">${tags}</div>
@@ -1149,8 +1501,17 @@ function renderResult(d, file, opts) {
 async function dlExp(fmt) {
   if (!currentResult) { toast('❌ 无分析结果', 'error'); return; }
   try {
-    const res = await fetch('/api/export?fmt='+fmt, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(currentResult) });
+    const s = getSettings();
+    const body = currentResult;
+    if (s.download_dir) body._download_dir = s.download_dir;
+    const res = await fetch('/api/export?fmt='+fmt, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
     if (!res.ok) throw new Error(res.statusText);
+    const cd = res.headers.get('content-disposition') || '';
+    if (!cd.includes('attachment')) {
+      // 服务端已保存到下载目录
+      const data = await res.json();
+      if (data.path) { toast('✅ 已导出到：' + data.path, 'success', 6000); return; }
+    }
     const names = {edl:'videodna.edl',fcp7xml:'videodna.xml',cutmark:'videodna_cuts.json',srt:'videodna_subtitles.srt',all:'videodna_export.zip'};
     const blob = await res.blob();
     const a = document.createElement('a');
@@ -1453,6 +1814,93 @@ async function runSkill(id) {
 function copyOutput() {
   const body = document.getElementById('outputBody');
   navigator.clipboard.writeText(body.textContent).then(() => toast('📋 已复制', 'success')).catch(() => toast('📋 复制失败', 'error'));
+}
+
+// ── AI 创作中心（任务8：AI 视频生成平台通用功能） ──
+async function loadStudio() {
+  try {
+    const res = await fetch('/api/ai/templates');
+    if (!res.ok) throw new Error(res.statusText);
+    const data = await res.json();
+    const tpls = data.templates || [];
+    document.getElementById('studioTpls').innerHTML = tpls.map(t => `
+      <div class="studio-tpl" onclick="applyStudioTemplate('${t.id}')" title="点击套用到自己的视频">
+        <span class="st-icon">${t.icon||'🎬'}</span>
+        <div class="st-name">${esc(t.name)}</div>
+        <div class="st-desc">${esc(t.desc)}</div>
+        <div class="st-meta">
+          <span class="badge badge-model">🎵 ${t.bpm} BPM</span>
+          <span class="badge badge-local">⏱ ${t.shot}s/镜</span>
+          <span class="badge badge-chat">点击套用</span>
+        </div>
+      </div>
+    `).join('');
+    if (!tpls.length) document.getElementById('studioTpls').innerHTML = '<div class="empty-state">暂无模板</div>';
+  } catch(e) { document.getElementById('studioTpls').innerHTML = '<div class="empty-state">加载模板失败: '+esc(e.message)+'</div>'; }
+}
+
+function applyStudioTemplate(tplId) {
+  if (!confirm('将模板节奏套用到你的视频？请选择要分析的视频文件。')) return;
+  document.getElementById('templateInput').dataset.tpl = tplId;
+  document.getElementById('templateInput').click();
+}
+
+async function genStoryboard() {
+  const topic = document.getElementById('sbTopic').value.trim();
+  const count = parseInt(document.getElementById('sbCount').value || '6', 10);
+  if (!topic) { toast('❌ 请输入主题或文案', 'error'); return; }
+  const el = document.getElementById('sbResult');
+  el.innerHTML = '<span style="color:var(--accent-3)">⏳ 正在生成分镜脚本…</span>';
+  try {
+    const res = await fetch('/api/ai/storyboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, length: count }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    const shots = data.shots || [];
+    const rows = shots.map((s, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${esc(s.scene || '')}</td>
+        <td>${esc(s.camera || '')}</td>
+        <td>${s.duration ? s.duration + 's' : '-'}</td>
+        <td>${esc(s.voiceover || s.vo || '')}</td>
+        <td>${esc(s.transition || '-')}</td>
+      </tr>
+    `).join('');
+    el.innerHTML = `
+      <div style="font-size:11px;color:var(--fg-3);margin-bottom:6px">${data.method === 'llm' ? '✨ AI 生成（' + esc(data.model || '') + '）' : '🧩 内置框架生成'} · 主题：${esc(topic)}</div>
+      <table class="sb-table"><thead><tr><th>#</th><th>画面</th><th>景别/运镜</th><th>时长</th><th>台词/旁白</th><th>转场</th></tr></thead><tbody>${rows}</tbody></table>
+    `;
+  } catch(e) { el.innerHTML = '<span style="color:var(--red)">❌ ' + esc(e.message) + '</span>'; }
+}
+
+async function recommendBgm() {
+  if (!currentResult) { toast('⚠️ 请先分析一个视频', 'error'); return; }
+  const el = document.getElementById('bgmResult');
+  el.innerHTML = '<span style="color:var(--accent-3)">⏳ 正在分析…</span>';
+  try {
+    const res = await fetch('/api/ai/bgm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dna: currentResult }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || res.statusText);
+    el.innerHTML = `
+      <div class="bgm-box">
+        <div><span style="font-size:11px;color:var(--fg-3)">检测 BPM</span><div class="bgm-mood">${data.bpm} BPM</div></div>
+        <div><span style="font-size:11px;color:var(--fg-3)">情绪风格</span><div class="bgm-mood">${esc(data.mood)}</div></div>
+        <div><span style="font-size:11px;color:var(--fg-3)">推荐曲风</span><div style="font-size:13px;font-weight:600">${esc((data.recommend||[]).join(' / '))}</div></div>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--fg-2);line-height:1.7">
+        <div>💡 ${esc(data.hint)}</div>
+        <div>🔍 ${esc(data.search_hint)}</div>
+      </div>
+    `;
+  } catch(e) { el.innerHTML = '<span style="color:var(--red)">❌ ' + esc(e.message) + '</span>'; }
 }
 
 // ── Modal helpers ──

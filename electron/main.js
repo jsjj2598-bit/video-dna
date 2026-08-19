@@ -4,7 +4,7 @@
  * Spawns the Python FastAPI backend as a child process,
  * opens a native window, and cleans up on exit.
  */
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -258,6 +258,25 @@ app.whenReady().then(async () => {
       defaultPath: defaultName || 'videodna_export',
     });
     return result.canceled ? null : result.filePath;
+  });
+
+  ipcMain.handle('dialog:openDirectory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+
+  ipcMain.handle('shell:showInFolder', async (_event, filePath) => {
+    if (!filePath) return false;
+    try {
+      if (require('fs').existsSync(filePath)) {
+        shell.showItemInFolder(filePath);
+      } else {
+        shell.openPath(require('path').dirname(filePath));
+      }
+      return true;
+    } catch (_) { return false; }
   });
 
   const alreadyUp = await isBackendUp();

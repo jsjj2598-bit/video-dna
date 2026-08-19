@@ -9,6 +9,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   saveFile: (defaultName) => ipcRenderer.invoke('dialog:saveFile', defaultName),
 
+  openDirectory: () => ipcRenderer.invoke('dialog:openDirectory'),
+
+  showInFolder: (filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
+
   onExport: (callback) => {
     const handler = (_event, fmt) => callback(fmt);
     ipcRenderer.on('export', handler);

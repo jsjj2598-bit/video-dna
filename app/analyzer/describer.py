@@ -12,13 +12,12 @@ API 需要环境变量 OPENAI_API_KEY 或 DASHSCOPE_API_KEY。
 """
 from __future__ import annotations
 
-import os
 import base64
+import os
 from pathlib import Path
 
 import cv2
 import numpy as np
-
 
 # ── 启发式降级（无需 API）────────────────────────────────────
 
@@ -243,19 +242,24 @@ def _build_prompt(sh_idx: int, bgr: np.ndarray, shot_info: dict) -> str:
     """构建发给 VLM 的 Prompt（含短剧/漫剧分类）。"""
     return (
         "你是一个专业视频剪辑师和镜头分析师。请一眼描述这个镜头：\n"
-        f"1. 画面内容（10字以内，如：「穿红色外套的女人在咖啡店看手机」「纯色转场画面」）\n"
-        f"2. 景别（远景/全景/中景/近景/特写）\n"
-        f"3. 相机运动（固定/摇镜/推拉/手持/抖动）\n"
-        f"4. 冷暖色调/氛围关键词\n"
-        f"5. 镜头类型（dialogue对话/action动作/establishing交代/closeup特写/emotional情绪/transition过渡）\n"
-        f"6. 画面中有几张人脸\n\n"
-        f"请只返回 JSON 格式，字段：content, shot_scale, camera_motion, mood, scene_type, face_count"
+        "1. 画面内容（10字以内，如：「穿红色外套的女人在咖啡店看手机」「纯色转场画面」）\n"
+        "2. 景别（远景/全景/中景/近景/特写）\n"
+        "3. 相机运动（固定/摇镜/推拉/手持/抖动）\n"
+        "4. 冷暖色调/氛围关键词\n"
+        "5. 镜头类型（dialogue对话/action动作/establishing交代/closeup特写/emotional情绪/transition过渡）\n"
+        "6. 画面中有几张人脸\n\n"
+        "请只返回 JSON 格式，字段：content, shot_scale, camera_motion, mood, scene_type, face_count"
     )
 
 
-def _call_openai(bgr: np.ndarray, prompt: str, model: str = "gpt-4o") -> dict | None:
+def _call_openai(
+    bgr: np.ndarray,
+    prompt: str,
+    model: str = "gpt-4o",
+    api_key: str | None = None,
+) -> dict | None:
     """调用 OpenAI GPT-4o Vision。"""
-    key = os.environ.get("OPENAI_API_KEY")
+    key = api_key or os.environ.get("OPENAI_API_KEY")
     if not key:
         return None
     try:
@@ -296,14 +300,20 @@ def _call_openai(bgr: np.ndarray, prompt: str, model: str = "gpt-4o") -> dict | 
         return None
 
 
-def _call_qwen(bgr: np.ndarray, prompt: str, model: str = "qwen-vl-max") -> dict | None:
+def _call_qwen(
+    bgr: np.ndarray,
+    prompt: str,
+    model: str = "qwen-vl-max",
+    api_key: str | None = None,
+) -> dict | None:
     """调用通义千问 VL API。"""
-    key = os.environ.get("DASHSCOPE_API_KEY")
+    key = api_key or os.environ.get("DASHSCOPE_API_KEY")
     if not key:
         return None
     try:
-        import httpx
         import json
+
+        import httpx
 
         _, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
         b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
@@ -351,8 +361,9 @@ def _call_custom(bgr: np.ndarray, prompt: str, cfg: dict) -> dict | None:
     """调用任意 OpenAI 兼容的视觉端点（含 Ollama / 自定义 base_url）。"""
     key = cfg.get("api_key") or os.environ.get("OPENAI_API_KEY")
     try:
-        import httpx
         import json
+
+        import httpx
 
         _, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
         b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
@@ -398,6 +409,8 @@ def describe_shot(
     backend: str = "auto",
     model: str = "gpt-4o",
     model_cfg: dict | None = None,
+    openai_key: str | None = None,
+    qwen_key: str | None = None,
 ) -> dict:
     """对一个关键帧做深度语义描述（含 AI 短剧/漫剧优化字段）。
 
@@ -435,7 +448,7 @@ def describe_shot(
 
     # — API 尝试 —
     if backend in ("auto", "openai"):
-        result = _call_openai(bgr, prompt, model=model)
+        result = _call_openai(bgr, prompt, model=model, api_key=openai_key)
         if result:
             result["method"] = "openai"
             result.setdefault("camera_motion", _estimate_camera_motion(bgr, prev_bgr))
@@ -448,7 +461,7 @@ def describe_shot(
             return result
 
     if backend in ("auto", "qwen"):
-        result = _call_qwen(bgr, prompt, model=model)
+        result = _call_qwen(bgr, prompt, model=model, api_key=qwen_key)
         if result:
             result["method"] = "qwen"
             result.setdefault("camera_motion", _estimate_camera_motion(bgr, prev_bgr))
@@ -497,6 +510,8 @@ def describe_all(
     backend: str = "auto",
     model: str = "gpt-4o",
     model_cfg: dict | None = None,
+    openai_key: str | None = None,
+    qwen_key: str | None = None,
 ) -> dict:
     """对 DNA 中所有镜头进行语义描述，就地更新 shots 字段。"""
     frames_dir = Path(frames_dir)
@@ -514,6 +529,7 @@ def describe_all(
         desc = describe_shot(
             kf_path, i, shot_info=sh, prev_keyframe_path=prev_kf,
             backend=backend, model=model, model_cfg=model_cfg,
+            openai_key=openai_key, qwen_key=qwen_key,
         )
         sh["content"] = desc.get("content")
         sh["shot_scale"] = desc.get("shot_scale")

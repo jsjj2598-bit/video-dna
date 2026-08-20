@@ -11,15 +11,14 @@ from __future__ import annotations
 
 import bisect
 import logging
-import os
 import shutil
 import tempfile
 from pathlib import Path
 
+from .. import registry
 from . import audio as old_audio  # 旧版保持向后兼容
 from . import ffmpeg_utils, hpss, shots, speech, transitions
 from .describer import describe_all
-from .. import registry
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +125,8 @@ def analyze(
     describe_shots: bool = True,   # 默认启用 OpenCV 启发式描述（无需 API）
     vlm_backend: str = "auto",
     vlm_model: str = "gpt-4o",
+    openai_key: str | None = None,
+    qwen_key: str | None = None,
     keep_workdir: bool = False,
     progress_cb: callable | None = None,
 ) -> dict:
@@ -154,7 +155,8 @@ def analyze(
         shots_list = shots.detect_shots(str(video_path), detector=detector)
         report("shots", 18, f"镜头切分完成：共 {len(shots_list)} 个镜头边界")
 
-        comp_on = lambda cid: bool((registry.get_component(cid) or {}).get("enabled"))
+        def comp_on(component_id: str) -> bool:
+            return bool((registry.get_component(component_id) or {}).get("enabled"))
 
         # ── 音频分析（HPSS 增强） ──
         wav = None
@@ -254,20 +256,18 @@ def analyze(
             try:
                 if vlm_cfg is not None:
                     report("describer", 66, f"多模态语义描述：{vlm_cfg.get('name') or vlm_cfg.get('model')}（镜头画面/景别/运镜/情绪）")
-                    if vlm_cfg["provider"] == "dashscope":
-                        os.environ["DASHSCOPE_API_KEY"] = vlm_cfg["api_key"]
-                    else:
-                        os.environ["OPENAI_API_KEY"] = vlm_cfg["api_key"]
                     describe_all(
                         {"shots": shots_list}, frames_dir,
                         backend=vlm_backend, model=vlm_cfg["model"],
                         model_cfg=vlm_cfg,
+                        openai_key=openai_key, qwen_key=qwen_key,
                     )
                 else:
                     report("describer", 66, "OpenCV 启发式描述镜头画面（未配置视觉模型）")
                     describe_all(
                         {"shots": shots_list}, frames_dir,
                         backend=vlm_backend, model=vlm_model,
+                        openai_key=openai_key, qwen_key=qwen_key,
                     )
             except Exception as exc:
                 logger.warning("镜头语义描述失败（保持未描述状态）: %s", exc)

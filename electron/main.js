@@ -10,8 +10,66 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 
-const PORT = 8000;
+const PORT = Number(process.env.VIDEODNA_PORT || 8000);
 const BACKEND_URL = `http://127.0.0.1:${PORT}`;
+const API_TOKEN = process.env.VIDEODNA_API_TOKEN || '';
+
+function frontendUrl() {
+  return API_TOKEN ? `${BACKEND_URL}/?token=${encodeURIComponent(API_TOKEN)}` : BACKEND_URL;
+}
+
+function uploadVideoPath(filePath, options = {}) {
+  return new Promise((resolve, reject) => {
+    const absolutePath = path.resolve(String(filePath || ''));
+    let stat;
+    try {
+      stat = fs.statSync(absolutePath);
+      if (!stat.isFile()) throw new Error('所选路径不是文件');
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    const boundary = `----VideoDNA${Date.now().toString(16)}`;
+    const fields = { session_id: options.session_id || '' };
+    if (options.openai_key) fields.openai_key = options.openai_key;
+    if (options.qwen_key) fields.qwen_key = options.qwen_key;
+    const fieldParts = Object.entries(fields).map(([name, value]) =>
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${String(value)}\r\n`
+    ).join('');
+    const fileHeader = `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${path.basename(absolutePath).replaceAll('"', '')}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+    const prefix = Buffer.from(fieldParts + fileHeader, 'utf8');
+    const suffix = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+    const detector = encodeURIComponent(options.detector || 'content');
+    const backend = encodeURIComponent(options.backend || 'auto');
+    const request = http.request({
+      hostname: '127.0.0.1',
+      port: PORT,
+      path: `/api/analyze?detector=${detector}&backend=${backend}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': prefix.length + stat.size + suffix.length,
+        ...(API_TOKEN ? { 'X-VideoDNA-Token': API_TOKEN } : {}),
+      },
+    }, (response) => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { body += chunk; });
+      response.on('end', () => {
+        let payload;
+        try { payload = JSON.parse(body); } catch (_) { payload = { detail: body || response.statusMessage }; }
+        if ((response.statusCode || 500) >= 400) reject(new Error(payload.detail || `上传失败 (${response.statusCode})`));
+        else resolve(payload);
+      });
+    });
+    request.on('error', reject);
+    request.write(prefix);
+    const stream = fs.createReadStream(absolutePath);
+    stream.on('error', (error) => request.destroy(error));
+    stream.on('end', () => request.end(suffix));
+    stream.pipe(request, { end: false });
+  });
+}
 
 const LOG_FILE = path.join(require('os').tmpdir(), 'videodna-electron.log');
 function log(...args) {
@@ -48,8 +106,17 @@ function findPython() {
 function isBackendUp() {
   return new Promise((resolve) => {
     const req = http.get(`${BACKEND_URL}/health`, (res) => {
-      res.resume();
-      resolve(res.statusCode === 200);
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => {
+        try {
+          const payload = JSON.parse(body);
+          resolve(res.statusCode === 200 && payload.service === 'video-dna-analyzer');
+        } catch (_) {
+          resolve(false);
+        }
+      });
     });
     req.on('error', () => resolve(false));
     req.setTimeout(1500, () => { req.destroy(); resolve(false); });
@@ -86,7 +153,7 @@ function startBackend() {
     const pyCandidates = process.platform === 'win32'
       ? [path.join(cwd, '.venv', 'Scripts', 'python.exe'), 'python']
       : [path.join(cwd, '.venv', 'bin', 'python'), 'python3'];
-    const py = pyCandidates.find((p) => p === 'python' || fs.existsSync(p));
+    const py = pyCandidates.find((p) => p === 'python' || p === 'python3' || fs.existsSync(p));
     if (!py) {
       console.error('[electron] 未找到 Python 解释器（.venv 或系统 python）');
       return null;
@@ -104,7 +171,12 @@ function startBackend() {
   pythonProcess = spawn(spawnCommand.cmd, spawnCommand.args, {
     cwd: spawnCommand.cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: {
+      ...process.env,
+      VIDEODNA_DATA_DIR: app.getPath('userData'),
+      VIDEODNA_API_TOKEN: API_TOKEN,
+      VIDEODNA_PORT: String(PORT),
+    },
     windowsHide: true,
   });
 
@@ -135,26 +207,11 @@ function startBackend() {
 function waitForBackend(retries = 30, interval = 500) {
   return new Promise((resolve, reject) => {
     let attempts = 0;
-
-    const check = () => {
+    const check = async () => {
       attempts++;
-      const req = http.get(`${BACKEND_URL}/health`, (res) => {
-        if (res.statusCode === 200) {
-          resolve();
-        } else if (attempts < retries) {
-          setTimeout(check, interval);
-        } else {
-          reject(new Error(`Backend unhealthy after ${retries * interval}ms`));
-        }
-      });
-      req.on('error', () => {
-        if (attempts < retries) {
-          setTimeout(check, interval);
-        } else {
-          reject(new Error(`Backend unreachable after ${retries * interval}ms`));
-        }
-      });
-      req.end();
+      if (await isBackendUp()) return resolve();
+      if (attempts < retries) return setTimeout(check, interval);
+      reject(new Error(`Backend unavailable after ${retries * interval}ms`));
     };
     check();
   });
@@ -176,7 +233,7 @@ function createWindow() {
   });
   console.log('Loading backend URL directly...');
   mainWindow.show();
-  mainWindow.loadURL(BACKEND_URL);
+  mainWindow.loadURL(frontendUrl());
 
   // Build native app menu
   const menu = Menu.buildFromTemplate([
@@ -279,25 +336,8 @@ app.whenReady().then(async () => {
     } catch (_) { return false; }
   });
 
-  // 菜单「打开视频…」→ 前端需要拿到文件内容构建 File 上传
-  ipcMain.handle('dialog:readFile', async (_event, filePath) => {
-    try {
-      const p = path.resolve(String(filePath || ''));
-      const st = fs.statSync(p);
-      if (!st.isFile()) return null;
-      if (st.size > 500 * 1024 * 1024) return { error: '文件超过 500MB 上限' };
-      const buf = fs.readFileSync(p);
-      const ext = path.extname(p).toLowerCase().slice(1);
-      return {
-        name: path.basename(p),
-        ext,
-        size: buf.length,
-        data: buf.toString('base64'),
-      };
-    } catch (e) {
-      return { error: e.message };
-    }
-  });
+  // 原生菜单使用流式 multipart 上传，不把大视频复制为 Base64 经过 IPC。
+  ipcMain.handle('analysis:uploadPath', (_event, filePath, options) => uploadVideoPath(filePath, options));
 
   const alreadyUp = await isBackendUp();
   log('isBackendUp ->', alreadyUp);
@@ -328,12 +368,12 @@ app.whenReady().then(async () => {
 <h2 style="color:#4f7dff">🧬 Video DNA Analyzer</h2>
 <p style="color:#ffd166;font-size:15px">正在启动分析引擎…</p>
 <p id="msg" style="color:#8a90a0;font-size:13px;line-height:1.8">首次启动需要解压并加载后端组件，大约需要 30~60 秒，请稍候。</p>
-<button onclick="location.reload()" style="background:#4f7dff;border:none;color:#fff;padding:8px 24px;border-radius:6px;cursor:pointer;margin-top:12px">重试</button>
+<button onclick="location.href='${frontendUrl()}'" style="background:#4f7dff;border:none;color:#fff;padding:8px 24px;border-radius:6px;cursor:pointer;margin-top:12px">重试</button>
 <script>
 let tries = 0;
 setInterval(() => {
   fetch('http://127.0.0.1:8000/health', { cache: 'no-store' })
-    .then((r) => { if (r.ok) location.reload(); })
+    .then((r) => { if (r.ok) location.href='${frontendUrl()}'; })
     .catch(() => {});
 }, 5000);
 </script>

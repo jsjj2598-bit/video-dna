@@ -8,8 +8,8 @@
 from __future__ import annotations
 
 from pathlib import Path
-from xml.etree.ElementTree import Element, SubElement, tostring
 from xml.dom import minidom
+from xml.etree.ElementTree import Element, SubElement, tostring
 
 
 def _tc(seconds: float, fps: float = 30.0) -> str:
@@ -29,8 +29,10 @@ def _transition_keyword(ttype: str | None) -> str:
     mapping = {
         "cut": "C",
         "dissolve": "D",
-        "fade": "F",
-        "white_flash": "W",
+        # CMX3600 has no portable fade/flash opcode. Export them as dissolves
+        # and preserve the semantic type in comments below.
+        "fade": "D",
+        "white_flash": "D",
     }
     return mapping.get(ttype, "C")
 
@@ -55,12 +57,12 @@ def export_edl(dna: dict, output_path: str | Path, fps: float = 30.0) -> str:
         rec_out = src_out
 
         trans = _transition_keyword(sh.get("transition"))
-        trans_str = f" {trans}     " if trans != "C" else ""
-
-        lines.append(
-            f"{event_num:03d}  AX       V     C        "
-            f"{src_in} {src_out} {rec_in} {rec_out}"
-        )
+        if trans == "D":
+            transition_frames = max(1, int(round(float(sh.get("transition_duration", 0.5)) * fps)))
+            event_type = f"D {transition_frames:03d}"
+        else:
+            event_type = "C    "
+        lines.append(f"{event_num:03d}  AX       V     {event_type}    {src_in} {src_out} {rec_in} {rec_out}")
 
         # 注释信息（关键帧、转场、台词）
         comments = []
@@ -77,7 +79,7 @@ def export_edl(dna: dict, output_path: str | Path, fps: float = 30.0) -> str:
 
         # 转场详细信息
         if sh.get("transition") and sh["transition"] in ("dissolve", "fade", "white_flash"):
-            dur = sh.get("transition_confidence", 0.5) * fps  # 帧数
+            dur = float(sh.get("transition_duration", 0.5)) * fps
             lines.append(f"* EFFECT NAME: {sh['transition']}")
             lines.append(f"* EFFECT DURATION: {int(dur)}")
 
@@ -100,63 +102,78 @@ def _xml_element(name: str, text: str | None = None, attrib: dict | None = None)
     return el
 
 
-def export_fcp7xml(dna: dict, output_path: str | Path, fps: float = 30.0) -> str:
+def export_fcp7xml(
+    dna: dict,
+    output_path: str | Path,
+    fps: float = 30.0,
+    source_path: str | Path | None = None,
+) -> str:
     """导出 FCP 7 XML。"""
     shots = dna.get("shots", [])
     meta = dna.get("meta", {})
     fps = meta.get("fps", fps)
     duration_sec = meta.get("duration", 0)
     duration_frames = int(round(duration_sec * fps))
+    source_path = source_path or dna.get("_source_path")
+    source_uri = Path(source_path).resolve().as_uri() if source_path else ""
 
     xmeml = Element("xmeml", attrib={"version": "4"})
     seq = SubElement(xmeml, "sequence")
     SubElement(seq, "duration").text = str(duration_frames)
-    SubElement(seq, "rate").append(_xml_element("timebase", str(int(fps))))
+    sequence_rate = SubElement(seq, "rate")
+    SubElement(sequence_rate, "timebase").text = str(int(round(fps)))
+    SubElement(sequence_rate, "ntsc").text = "TRUE" if abs(fps - round(fps)) > 0.01 else "FALSE"
 
     media = SubElement(seq, "media")
     video = SubElement(media, "video")
 
     # Format
     fmt = SubElement(video, "format")
-    SubElement(fmt, "samplecharacteristics").append(
-        _xml_element("rate", attrib={"ntsc": "FALSE"})
-    )
-    fmt.find("samplecharacteristics").append(
-        _xml_element("timebase", str(int(fps)))
-    )
+    characteristics = SubElement(fmt, "samplecharacteristics")
+    format_rate = SubElement(characteristics, "rate")
+    SubElement(format_rate, "timebase").text = str(int(round(fps)))
+    SubElement(format_rate, "ntsc").text = "TRUE" if abs(fps - round(fps)) > 0.01 else "FALSE"
 
     track = SubElement(video, "track")
 
     for i, sh in enumerate(shots):
+        start = int(round(sh["start"] * fps))
+        dur = int(round(sh["duration"] * fps))
+        if i > 0 and sh.get("transition") and sh["transition"] != "cut":
+            transition_frames = max(1, int(round(float(sh.get("transition_duration", 0.5)) * fps)))
+            transition = SubElement(track, "transitionitem")
+            SubElement(transition, "start").text = str(max(0, start - transition_frames // 2))
+            SubElement(transition, "end").text = str(start + transition_frames // 2)
+            SubElement(transition, "alignment").text = "center"
+            effect = SubElement(transition, "effect")
+            SubElement(effect, "name").text = sh["transition"]
+            SubElement(effect, "effectid").text = "Cross Dissolve"
+            SubElement(effect, "effecttype").text = "transition"
+            SubElement(effect, "mediatype").text = "video"
+
         clip = SubElement(track, "clipitem")
-        clip_id = f"shot_{i:03d}"
         SubElement(clip, "name").text = f"Shot {i} ({sh.get('transition', 'cut')})"
 
         # 时长
-        dur = int(round(sh["duration"] * fps))
         SubElement(clip, "duration").text = str(dur)
-        SubElement(clip, "in").text = "0"
-        SubElement(clip, "out").text = str(dur)
+        source_in = int(round(sh["start"] * fps))
+        source_out = int(round(sh["end"] * fps))
+        SubElement(clip, "in").text = str(source_in)
+        SubElement(clip, "out").text = str(source_out)
 
         # 时间轴位置
-        start = int(round(sh["start"] * fps))
         SubElement(clip, "start").text = str(start)
         SubElement(clip, "end").text = str(start + dur)
 
         # 文件引用
-        file = SubElement(clip, "file")
-        SubElement(file, "name").text = clip_id
-        SubElement(file, "pathurl").text = f"file://shots/{clip_id}.jpg" if sh.get("keyframe") else ""
-
-        # 转场
-        if sh.get("transition") and sh["transition"] != "cut":
-            trans_elem = SubElement(clip, "transition")
-            # 转场长度（帧）
-            trans_dur = max(1, int(round(dur * 0.1)))  # 10% of clip as transition
-            SubElement(trans_elem, "start").text = str(trans_dur)
-            SubElement(trans_elem, "end").text = str(trans_dur + 1)
-            trans_name = SubElement(trans_elem, "effect")
-            SubElement(trans_name, "name").text = sh["transition"]
+        file = SubElement(clip, "file", attrib={"id": "source-media"})
+        if i == 0:
+            SubElement(file, "name").text = Path(source_path).name if source_path else "source-video"
+            SubElement(file, "pathurl").text = source_uri
+            SubElement(file, "duration").text = str(duration_frames)
+            rate = SubElement(file, "rate")
+            SubElement(rate, "timebase").text = str(int(round(fps)))
+            SubElement(rate, "ntsc").text = "TRUE" if abs(fps - round(fps)) > 0.01 else "FALSE"
 
         # 台词元数据
         comments = []
@@ -167,29 +184,20 @@ def export_fcp7xml(dna: dict, output_path: str | Path, fps: float = 30.0) -> str
         if comments:
             SubElement(clip, "comment").text = "\n".join(comments)
 
-    # 音频
+    # Beats and sound effects are timeline markers, not fake audio clips.
     audio_info = dna.get("audio", {})
-    audio_track = SubElement(media, "audio")
-    at = SubElement(audio_track, "track")
-    SubElement(at, "name").text = "DNA Audio Analysis"
-
-    if audio_info.get("beats"):
-        for b in audio_info["beats"]:
-            bf = int(round(b * fps))
-            clip_elem = SubElement(at, "clipitem")
-            SubElement(clip_elem, "name").text = "beat"
-            SubElement(clip_elem, "start").text = str(bf)
-            SubElement(clip_elem, "duration").text = "1"
-
-    if audio_info.get("sfx_candidates"):
-        for sfx in audio_info["sfx_candidates"]:
-            bf = int(round(sfx["time"] * fps))
-            clip_elem = SubElement(at, "clipitem")
-            SubElement(clip_elem, "name").text = "sfx"
-            SubElement(clip_elem, "start").text = str(bf)
-            SubElement(clip_elem, "duration").text = "2"
-            if "class" in sfx:
-                SubElement(clip_elem, "comment").text = sfx["class"]
+    markers = [("Beat", beat, "Detected beat") for beat in audio_info.get("beats", [])]
+    markers.extend(
+        ("SFX", item.get("time", 0), item.get("class", "Sound effect candidate"))
+        for item in audio_info.get("sfx_candidates", [])
+    )
+    for name, seconds, comment in markers:
+        frame = int(round(float(seconds) * fps))
+        marker = SubElement(seq, "marker")
+        SubElement(marker, "name").text = name
+        SubElement(marker, "comment").text = str(comment)
+        SubElement(marker, "in").text = str(frame)
+        SubElement(marker, "out").text = str(frame)
 
     # 美化输出
     rough = tostring(xmeml, encoding="unicode")
@@ -257,10 +265,10 @@ def export_srt(dna: dict, output_path: str | Path) -> str:
         return str(output_path)
 
     def _srt_ts(sec: float) -> str:
-        hh = int(sec // 3600)
-        mm = int((sec % 3600) // 60)
-        ss = int(sec % 60)
-        ms = int(round((sec - int(sec)) * 1000))
+        total_ms = max(0, int(round(float(sec) * 1000)))
+        hh, remainder = divmod(total_ms, 3_600_000)
+        mm, remainder = divmod(remainder, 60_000)
+        ss, ms = divmod(remainder, 1_000)
         return f"{hh:02d}:{mm:02d}:{ss:02d},{ms:03d}"
 
     lines = []

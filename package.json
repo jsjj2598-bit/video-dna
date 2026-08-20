@@ -1,6 +1,6 @@
 {
   "name": "video-dna-analyzer",
-  "version": "0.2.0",
+  "version": "0.3.1",
   "description": "Video Editing Structure Reverse-Engineering Engine — Desktop App",
   "main": "electron/main.js",
   "scripts": {

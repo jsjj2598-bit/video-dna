@@ -7,7 +7,7 @@
 - 插件（Plugins）：用户 Python 插件（manifest.json + entry.py + hooks），
   在分析管线中自动执行（on_shots / on_summary），支持 ZIP 安装。
 
-所有用户数据保存在 %APPDATA%/Video DNA Analyzer/config.json（打包版可写路径）。
+所有用户数据保存在平台规范的应用数据目录，可通过 VIDEODNA_DATA_DIR 覆盖。
 """
 from __future__ import annotations
 
@@ -19,15 +19,17 @@ import shutil
 import sys
 import uuid
 import zipfile
+from contextlib import suppress
 from pathlib import Path
+
+from .core.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(
-    os.environ.get("APPDATA") or str(Path.home())
-) / "Video DNA Analyzer"
-CONFIG_FILE = DATA_DIR / "config.json"
-PLUGIN_DIR = DATA_DIR / "plugins"
+_settings = get_settings()
+DATA_DIR = _settings.data_dir
+CONFIG_FILE = _settings.config_file
+PLUGIN_DIR = _settings.plugins_dir
 PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -161,11 +163,16 @@ def _load() -> dict:
 def _save(cfg: dict) -> None:
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_FILE.write_text(
+        temporary = CONFIG_FILE.with_suffix(".json.tmp")
+        temporary.write_text(
             json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8"
         )
+        with suppress(OSError):
+            temporary.chmod(0o600)
+        temporary.replace(CONFIG_FILE)
     except Exception as exc:
         logger.error("保存配置失败: %s", exc)
+        raise RuntimeError(f"保存配置失败: {exc}") from exc
 
 
 # ── 模型 ─────────────────────────────────────────────────
@@ -179,6 +186,16 @@ def list_models() -> list[dict]:
     for m in user_models:
         merged[m["id"]] = dict(m)
     return list(merged.values())
+
+
+def list_public_models() -> list[dict]:
+    """Return model metadata safe to expose through the HTTP API."""
+    public = []
+    for model in list_models():
+        item = {key: value for key, value in model.items() if key != "api_key"}
+        item["has_api_key"] = bool(model.get("api_key")) or model.get("provider") == "ollama"
+        public.append(item)
+    return public
 
 
 def get_model(mid: str) -> dict | None:
@@ -199,10 +216,13 @@ def upsert_model(data: dict) -> dict:
         raise ValueError("名称、接口地址与模型名不能为空")
     if not base_url.startswith(("http://", "https://")):
         raise ValueError("接口地址必须以 http(s):// 开头")
+    existing = get_model(mid)
+    submitted_key = str(data.get("api_key") or "").strip()
+    api_key = submitted_key or (str(existing.get("api_key") or "") if existing else "")
     record = {
         "id": mid, "name": name, "kind": kind, "provider": provider,
         "base_url": base_url.rstrip("/"), "model": model,
-        "api_key": str(data.get("api_key") or "").strip(),
+        "api_key": api_key,
         "builtin": False,
     }
     cfg = _load()
@@ -475,7 +495,9 @@ def _load_plugin_manifest(pdir: Path) -> dict | None:
     except Exception as exc:
         logger.warning("插件 %s 的 manifest 解析失败: %s", pdir.name, exc)
         return None
-    if not data.get("id") or not data.get("name"):
+    plugin_id = str(data.get("id") or "")
+    normalized_id = plugin_id.replace("-", "").replace("_", "")
+    if not normalized_id or not normalized_id.isascii() or not normalized_id.isalnum() or not data.get("name"):
         return None
     data.setdefault("version", "1.0")
     data.setdefault("entry", "main.py")
@@ -578,10 +600,17 @@ def install_plugin_zip(zip_path: str | Path) -> dict:
     try:
         with zipfile.ZipFile(zip_path) as zf:
             # 防 zip-slip：拒绝任何含 .. 或绝对路径的条目
-            for info in zf.infolist():
+            entries = zf.infolist()
+            if len(entries) > 1000:
+                raise ValueError("插件包文件数量超过 1000 个")
+            if sum(info.file_size for info in entries) > 200 * 1024 * 1024:
+                raise ValueError("插件包解压后超过 200MB 上限")
+            for info in entries:
                 name = info.filename.replace("\\", "/")
                 if name.startswith("/") or ".." in name.split("/"):
                     raise ValueError(f"压缩包包含非法路径条目: {info.filename}")
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise ValueError(f"压缩包不允许包含符号链接: {info.filename}")
             zf.extractall(tmp)
         target = None
         for cand in (tmp, *[d for d in tmp.iterdir() if d.is_dir()]):
@@ -606,10 +635,10 @@ def install_plugin_zip(zip_path: str | Path) -> dict:
 
 
 def delete_plugin(pid: str) -> bool:
-    removed = False
-    for base in _plugin_dirs():
-        pdir = base / pid
-        if pdir.is_dir() and (pdir / "manifest.json").exists():
-            shutil.rmtree(pdir, ignore_errors=True)
-            removed = True
-    return removed
+    """删除用户安装的插件；仓库内置插件只读，不能经 API 移除。"""
+    pdir = PLUGIN_DIR / pid
+    mf = _load_plugin_manifest(pdir) if pdir.is_dir() else None
+    if not mf or mf["id"] != pid:
+        return False
+    shutil.rmtree(pdir)
+    return True

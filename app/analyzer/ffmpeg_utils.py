@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 
@@ -74,13 +75,11 @@ def probe(video_path: str) -> dict:
         ]
         with open(out_json, "w", encoding="utf-8") as fh:
             subprocess.run(cmd, stdout=fh, stderr=subprocess.DEVNULL, check=True)
-        with open(out_json, "r", encoding="utf-8") as fh:
+        with open(out_json, encoding="utf-8") as fh:
             data = json.load(fh)
     finally:
-        try:
+        with suppress(OSError):
             os.unlink(out_json)
-        except OSError:
-            pass
 
     fmt = data.get("format", {})
     duration = _parse_fraction(fmt.get("duration")) or 0.0

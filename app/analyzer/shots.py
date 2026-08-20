@@ -9,10 +9,7 @@ from __future__ import annotations
 def detect_shots(video_path: str, detector: str = "content", threshold: float = 27.0) -> list[dict]:
     from scenedetect import AdaptiveDetector, ContentDetector, detect
 
-    if detector == "adaptive":
-        det = AdaptiveDetector()
-    else:
-        det = ContentDetector(threshold=threshold)
+    det = AdaptiveDetector() if detector == "adaptive" else ContentDetector(threshold=threshold)
 
     scenes = detect(str(video_path), det)
     shots: list[dict] = []

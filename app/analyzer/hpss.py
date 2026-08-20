@@ -75,7 +75,7 @@ def analyze_percussive(p: np.ndarray, sr: int = 22050) -> dict:
         threshold = float(np.percentile(onset_strength, 70)) if onset_strength.size > 0 else 0
         candidates = [
             {"time": round(float(t), 3), "strength": round(float(s), 3)}
-            for t, s in zip(onsets, onset_strength)
+            for t, s in zip(onsets, onset_strength, strict=True)
             if s >= threshold
         ]
 
@@ -156,7 +156,7 @@ def _legacy_analysis(y: np.ndarray, sr: int) -> dict:
         threshold = float(np.percentile(onset_strength, 70)) if onset_strength.size > 0 else 0
         result["sfx_candidates"] = [
             {"time": round(float(t), 3), "strength": round(float(s), 3)}
-            for t, s in zip(onsets, onset_strength)
+            for t, s in zip(onsets, onset_strength, strict=True)
             if s >= threshold
         ]
     except Exception:

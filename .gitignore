@@ -29,6 +29,8 @@ _test.jpg
 _api_result*.json
 check_*.py
 test_*.py
+!tests/
+!tests/**/*.py
 
 # IDE
 .vscode/

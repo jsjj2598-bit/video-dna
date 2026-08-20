@@ -5,7 +5,20 @@
 """
 from __future__ import annotations
 
+import logging
+from functools import lru_cache
+
 import numpy as np
+
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=2)
+def _whisper_model(model_size: str):
+    """Reuse loaded models across analyses instead of reloading per request."""
+    from faster_whisper import WhisperModel
+
+    return WhisperModel(model_size, device="cpu", compute_type="int8")
 
 
 def empty_transcript() -> dict:
@@ -15,6 +28,7 @@ def empty_transcript() -> dict:
         "segments": [],
         "word_count": 0,
         "speech_regions": [],
+        "transcription_method": "none",
     }
 
 
@@ -72,11 +86,8 @@ def transcribe(wav_path: str, model_size: str = "small",
     asr_ok = False
     if use_whisper:
         try:
-            from faster_whisper import WhisperModel
-            import os
 
-            # 检查缓存中是否有模型
-            model = WhisperModel(model_size, device="cpu", compute_type="int8")
+            model = _whisper_model(model_size)
             segments, info = model.transcribe(
                 wav_path,
                 language=language,
@@ -107,9 +118,10 @@ def transcribe(wav_path: str, model_size: str = "small",
                 for s in segs
             ]
             asr_ok = True
+            result["transcription_method"] = "faster-whisper"
 
-        except Exception:
-            pass  # ASR 失败（无网络/无模型），走降级
+        except Exception as exc:
+            logger.warning("Whisper ASR unavailable; falling back to energy regions: %s", exc)
 
     # 2. 降级：能量检测语音段落
     if not asr_ok:
@@ -122,5 +134,6 @@ def transcribe(wav_path: str, model_size: str = "small",
         result["word_count"] = 0
         result["text"] = ""
         result["language"] = None
+        result["transcription_method"] = "energy"
 
     return result

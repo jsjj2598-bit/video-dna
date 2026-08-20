@@ -13,7 +13,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   showInFolder: (filePath) => ipcRenderer.invoke('shell:showInFolder', filePath),
 
-  readFile: (filePath) => ipcRenderer.invoke('dialog:readFile', filePath),
+  analyzePath: (filePath, options) => ipcRenderer.invoke('analysis:uploadPath', filePath, options),
 
   onExport: (callback) => {
     const handler = (_event, fmt) => callback(fmt);

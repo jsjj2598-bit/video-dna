@@ -76,7 +76,7 @@ def analyze_audio(wav_path: str) -> dict:
             strong_times = librosa.frames_to_time(onset_frames[mask], sr=sr)
             result["sfx_candidates"] = [
                 {"time": round(float(t), 3), "strength": round(float(s), 3)}
-                for t, s in zip(strong_times, strengths[mask])
+                for t, s in zip(strong_times, strengths[mask], strict=True)
             ]
     except Exception:
         pass

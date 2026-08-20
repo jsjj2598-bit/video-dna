@@ -1,231 +1,211 @@
-# 🧬 Video DNA Analyzer
+# Video DNA Analyzer
 
-**视频剪辑结构逆向分析引擎**  
-上传任意视频 → 自动提取完整剪辑 DNA  
+本地优先的视频剪辑结构分析工具。它把一支成片拆解为镜头、转场、节拍、台词、关键帧和语义标签，并输出可继续处理的剪辑 DNA 数据。
 
-```
-分镜边界 → 转场类型(cut/dissolve/fade/white_flash) → BPM节拍卡点 →
-音效候选 → ASR台词转写 → 语义描述(景别/相机运动/内容) →
-导出 EDL / FCP7 XML / Cutmark JSON → 桌面端(Win/Mac)
-```
+> 项目当前处于 alpha 阶段。基础分析和 Cutmark/SRT 可用于实际工作流；EDL、FCP7 XML 和剪映草稿在正式生产使用前，应使用目标剪辑软件完成兼容性验证。
 
----
+## 功能
 
-## 🚀 快速开始
+- PySceneDetect 镜头切分和 OpenCV 转场分类。
+- librosa HPSS、BPM、节拍、静音和强瞬态分析。
+- 可选 faster-whisper 台词转写，失败时降级为能量区域检测。
+- OpenCV 启发式镜头标签，或接入 OpenAI、通义千问、Ollama/OpenAI 兼容视觉模型。
+- 可交互时间轴、关键帧、历史回看和视频 Range 播放。
+- EDL、FCP7 XML、Cutmark JSON、SRT 和剪映草稿导出。
+- 内置节奏模板、分镜脚本和 BGM 风格建议。
+- CLI、FastAPI Web 服务和 Electron 桌面端。
 
-### 环境依赖
+## 运行要求
 
-| 组件 | 最低版本 | 
-|------|---------|
-| Python | ≥ 3.10 |
-| FFmpeg | ≥ 5.0 (含 ffprobe) |
-| Node.js | ≥ 18 (桌面端可选) |
+- Python 3.10–3.12，推荐 Python 3.11。
+- FFmpeg/ffprobe 5.0 或更高版本。
+- Node.js 18 或更高版本，仅桌面端需要。
 
-### 1️⃣ 安装
+## 安装
+
+基础分析环境：
 
 ```bash
-git clone https://github.com/<你的用户名>/video-dna.git
+git clone https://github.com/jsjj2598-bit/video-dna.git
 cd video-dna
-
-# Python 依赖
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-
-# (可选) Electron 桌面端
-npm install
+python3.11 -m venv .venv
+source .venv/bin/activate           # Windows: .venv\Scripts\activate
+pip install -e .
 ```
 
-### 2️⃣ CLI 分析
+包含 Whisper ASR：
 
 ```bash
-.venv\Scripts\python -m app.cli 视频.mp4 -o 输出目录
-
-# 完整模式（含描述 + 所有导出格式）
-.venv\Scripts\python -m app.cli 视频.mp4 -o 输出目录 --describe --export all
+pip install -e ".[asr]"
 ```
 
-### 3️⃣ HTTP Web 服务
+开发环境：
 
 ```bash
-.venv\Scripts\python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
-# 浏览器打开 http://localhost:8000
+pip install -e ".[asr,dev]"
+npm ci
 ```
 
-### 4️⃣ 🖥️ 桌面端
+## 使用
+
+### CLI
+
+```bash
+video-dna input.mp4 -o output --export all
+
+# 不提取关键帧或不做语义描述
+video-dna input.mp4 -o output --no-keyframes --no-describe
+
+# 批量分析目录
+video-dna --input-dir ./videos -o output --export srt
+```
+
+### Web 服务
+
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+打开 <http://127.0.0.1:8000>。默认只建议本机使用。
+
+如确实需要通过其他设备访问，应配置随机 Token 并在受信任的 TLS 反向代理后运行：
+
+```bash
+export VIDEODNA_API_TOKEN="replace-with-a-long-random-secret"
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+所有 `/api/*` 请求需携带：
+
+```text
+X-VideoDNA-Token: replace-with-a-long-random-secret
+```
+
+使用内置 Web UI 时，可首次访问 `http://主机:8000/?token=...`。服务校验后会写入仅同源使用的 HttpOnly Cookie，页面随后会从地址栏移除 Token。
+
+### Electron 桌面端
 
 ```bash
 npm start
 ```
 
-自动拉起 Python 后端 + 原生窗口，无需手动操作。
+桌面端会启动本地后端。原生文件选择使用流式 multipart 上传，不会再把整个视频转换成 Base64 放进 IPC。
 
----
+## 配置
 
-## 📦 构建桌面安装包
+| 环境变量 | 默认值 | 说明 |
+|---|---:|---|
+| `VIDEODNA_DATA_DIR` | 平台用户数据目录 | 配置、插件、上传历史和下载目录 |
+| `VIDEODNA_MAX_UPLOAD_BYTES` | 2GB | 单个上传文件上限 |
+| `VIDEODNA_MAX_HISTORY_BYTES` | 8GB | 历史数据总量上限 |
+| `VIDEODNA_TASK_TTL_SECONDS` | 24 小时 | 完成任务进度在内存中的保留时间 |
+| `VIDEODNA_API_TOKEN` | 空 | 配置后启用 API Token 校验 |
 
-### Windows
+平台默认数据目录：
 
-```bash
-npm run build:win
-# → dist/Video DNA Analyzer Setup.exe (安装版)
-# → dist/Video DNA Analyzer Portable.exe (免安装便携版)
+- macOS：`~/Library/Application Support/Video DNA Analyzer`
+- Windows：`%LOCALAPPDATA%\Video DNA Analyzer`
+- Linux：`$XDG_DATA_HOME/video-dna-analyzer` 或 `~/.local/share/video-dna-analyzer`
+
+## 项目架构
+
+```text
+app/
+├── api/
+│   ├── router.py                 # 路由组合
+│   └── routes/
+│       ├── analysis.py           # 分析提交、进度和结果
+│       ├── media.py              # 历史、关键帧、视频流
+│       ├── exports.py            # EDL/XML/JSON/SRT 导出
+│       ├── studio.py             # 模板、草稿、分镜、BGM
+│       └── components.py         # 模型、组件、技能、插件
+├── core/
+│   ├── config.py                 # 版本、环境变量和平台目录
+│   └── security.py               # 可选 Token 认证
+├── services/
+│   ├── analysis.py               # 分析用例编排
+│   ├── storage.py                # 上传、结果和历史持久化
+│   ├── tasks.py                  # 有界线程安全进度状态
+│   └── templates.py              # 节奏模板和切点映射
+├── analyzer/                     # 镜头、音频、ASR、VLM 算法
+├── static/
+│   ├── index.html
+│   ├── app.css
+│   └── js/                        # core/history/analysis/components/studio
+├── main.py                       # FastAPI 应用工厂
+├── exporter.py
+├── draft.py
+├── registry.py
+└── cli.py
+electron/                         # 桌面端进程和打包配置
+tests/                            # 回归测试
 ```
 
-### macOS
+设计约束：
 
-```bash
-npm run build:mac
-# → dist/Video DNA Analyzer.dmg
-```
+- 路由只处理 HTTP 输入输出，不直接维护任务全局状态。
+- 后续操作必须使用 `session_id`，不依赖“最近一次分析”。
+- API Key 按请求或模型客户端传递，不写入进程级临时环境变量。
+- 完整结果保存到 session 的 `result.json`，内存只保存有限进度日志。
+- 用户数据不写入源代码目录或桌面应用安装目录。
 
-双击 DMG 拖入 Applications。Apple Silicon + Intel 双架构。
+## 分析输出
 
-### Linux
-
-```bash
-npm run build:linux
-# → dist/Video DNA Analyzer.AppImage
-
-chmod +x Video\ DNA\ Analyzer.AppImage
-./Video\ DNA\ Analyzer.AppImage
-```
-
----
-
-## 🏗️ 项目架构
-
-```
-video-dna/
-├── app/                          # Python 分析引擎
-│   ├── analyzer/
-│   │   ├── ffmpeg_utils.py       # ffprobe / 音频提取 / 帧提取
-│   │   ├── shots.py              # PySceneDetect 镜头检测
-│   │   ├── transitions.py        # OpenCV BGR 转场分类器
-│   │   │                        #   → cut / dissolve / fade / white_flash
-│   │   ├── audio.py              # Librosa 音频分析 (向后兼容)
-│   │   ├── hpss.py               # 🆕 谐波/打击乐分离 → 更准 BPM
-│   │   ├── speech.py             # 🆕 ASR (faster-whisper) / 能量降级
-│   │   ├── describer.py          # 🆕 VLM 语义描述 (API/OpenCV 降级)
-│   │   └── pipeline.py           # 全管线编排 P0–P5
-│   ├── exporter.py               # 🆕 EDL / FCP7 XML / Cutmark JSON 导出
-│   ├── main.py                   # FastAPI HTTP 入口 + 关键帧服务 + 导出下载
-│   ├── cli.py                    # 命令行入口
-│   └── static/index.html         # 暗色主题前端
-├── electron/                     # 🆕 Electron 桌面端壳
-│   ├── main.js                   # 主进程 (自动启动 Python 后端)
-│   ├── preload.js                # IPC 通信桥 (文件对话框/导出/平台)
-│   └── builder.yml               # electron-builder 构建配置
-├── scripts/                      # 测试视频生成器
-├── requirements.txt
-├── package.json
-└── README.md
-```
-
----
-
-## 📊 输出格式 — 剪辑 DNA JSON
-
-```jsonc
+```json
 {
   "meta": {
-    "duration": 10.0,              // 秒
+    "duration": 10.0,
     "fps": 30.0,
     "resolution": "640x360",
-    "total_shots": 4,              // 镜头总数
-    "avg_shot_duration": 2.5,      // 平均镜头时长
-    "beat_alignment_ratio": 0.75,  // 卡点率
-    "transitions": {
-      "cut": 2, "dissolve": 1, "fade": 1, "white_flash": 1
-    }
+    "total_shots": 4,
+    "avg_shot_duration": 2.5,
+    "beat_alignment_ratio": 0.75,
+    "transitions": { "cut": 3 }
   },
   "audio": {
-    "tempo_bpm": 117.45,           // BGM BPM
-    "beats": [1.022, 1.533, …],    // 节拍时间点
-    "beat_count": 16,
-    "sfx_candidates": [            // 🆕 音效候选
-      {"time": 0.5, "strength": 3.0}
-    ],
-    "silence_ratio": 0.3,          // 🆕 静音比例
-    "speech_regions": [            // 🆕 语音段落
-      {"start": 0.116, "end": 2.159, "text": "大家好"}
-    ],
-    "harmonic": {…},               // 🆕 谐波分量分析
-    "percussive": {…}              // 🆕 打击分量分析
+    "tempo_bpm": 117.45,
+    "beats": [1.022, 1.533],
+    "speech_regions": []
   },
   "shots": [
     {
       "index": 0,
-      "start": 0.0, "end": 2.0, "duration": 2.0,
-      "transition": "cut",         // 🆕 转场类型
-      "beat_aligned": true,        // 是否卡点
-      "content": "暖色调·中景·固定镜头", // 🆕 语义描述
-      "camera_motion": "固定",      // 🆕 相机运动
-      "shot_scale": "中景",         // 🆕 景别
-      "transcript": "大家好",       // 🆕 台词
-      "keyframe": "shot_000.jpg"   // 关键帧
+      "start": 0.0,
+      "end": 2.0,
+      "transition": "cut",
+      "beat_aligned": true,
+      "content": "远景·暖色调·固定",
+      "keyframe": "shot_000.jpg"
     }
   ],
-  "summary": "共 4 个镜头，平均 2.17 秒/镜；转场：硬切×2、叠化×1、闪白×1；BGM 约 117 BPM……"
+  "summary": "共 4 个镜头……"
 }
 ```
 
-### 导出格式
+## 测试与质量检查
 
-| 格式 | 用途 | CLI | HTTP |
-|------|------|-----|------|
-| **CMX3600 EDL** | 通用离线编辑交换 | `--export edl` | `/api/export?fmt=edl` |
-| **FCP7 XML** | Final Cut Pro 兼容 | `--export fcp7xml` | `/api/export?fmt=fcp7xml` |
-| **Cutmark JSON** | 极简切点清单 | `--export cutmark` | `/api/export?fmt=cutmark` |
-
----
-
-## 🧪 技术栈
-
-| 层 | 实现 |
-|----|------|
-| 🎬 镜头切分 | PySceneDetect (ContentDetector / AdaptiveDetector) |
-| 🔄 转场分类 | OpenCV BGR 三通道帧差 + 亮度分析（支持等亮度异色） |
-| 🎵 音频分析 | librosa (BPM/节拍/能量/静音/瞬态) |
-| 🎛️ 音频增强 | HPSS 谐波/打击分离 → 纯净 BPM + 干净 SFX |
-| 🎙️ ASR 台词 | faster-whisper（需网络）/ 能量检测降级 |
-| 🖼️ 语义描述 | OpenAI GPT-4o Vision / 通义千问 VL / OpenCV 启发式降级 |
-| 📤 导出 | EDL (CMX3600) / FCP7 XML / Cutmark JSON |
-| 🌐 HTTP | FastAPI + uvicorn |
-| 🖥️ 桌面端 | Electron + electron-builder |
-
----
-
-## 🔧 管线流水线
-
-```
-上传视频
-  │
-  ├─ 1. ffprobe → 元数据 (时长 / FPS / 分辨率 / 编码)
-  ├─ 2. PySceneDetect → 镜头切分
-  ├─ 3. 音频提取 → HPSS 分离
-  │     ├─ 谐波分量 → BPM / 节拍
-  │     ├─ 打击分量 → SFX 候选
-  │     └─ 全信号 → 能量包络 / 静音比例
-  ├─ 4. ASR → 台词转写 / 语音段落（失败降级能量检测）
-  ├─ 5. OpenCV BGR 转场分类
-  ├─ 6. 关键帧提取
-  ├─ 7. 语义描述 (VLM API / OpenCV 启发式)
-  └─ 8. 导出 (EDL / FCP7 XML / Cutmark)
+```bash
+ruff check app tests
+pytest
+python -m compileall -q app
+node --check electron/main.js
+node --check electron/preload.js
+for file in app/static/js/*.js; do node --check "$file"; done
 ```
 
----
+涉及导出格式的提交，除自动化测试外，还应在目标剪辑软件中完成导入验证。
 
-## 🤝 贡献 / 后续方向
+## 安全
 
-- **TransNet V2** — 替代 PySceneDetect，准确检测渐变转场
-- **Demucs** — 音乐/人声/音效分离 → 独立分析
-- **YAMNet / PANN** — 音效精细分类（脚步声、枪声、门铃…）
-- **多模态大模型** — GPT-4o / Qwen-VL 精准逐镜头描述
-- **剪映草稿 / Final Cut Pro 原生导出**
-- **GPU 加速** — CUDA 推理加速
+- 不要把未设置 Token 的服务暴露到局域网或公网。
+- 插件是具有当前用户完整权限的 Python 代码，只安装可信插件。
+- HTTP 模型列表不会返回明文 API Key；配置文件仍应被视为敏感数据。
+- 安全问题请参考 [SECURITY.md](SECURITY.md)。
 
----
+## 参与贡献
 
-## 📄 许可证
+开发流程和代码组织约束见 [CONTRIBUTING.md](CONTRIBUTING.md)，问题与优化路线见 [BUGS_AND_OPTIMIZATIONS.md](BUGS_AND_OPTIMIZATIONS.md)。
 
-MIT
+## License
+
+[MIT](LICENSE)

@@ -1,13 +1,11 @@
 appId: com.videodna.analyzer
 productName: "Video DNA Analyzer"
-copyright: Copyright © 2025 Video DNA Team
+copyright: Copyright © 2026 Video DNA contributors
 
 directories:
   output: dist
   buildResources: electron
 
-# 注意：portable EXE 不包含 Python 后端。
-# 安装后需配合 start_desktop.cmd 使用（自动启动后端 + Electron 窗口）
 files:
   - "electron/**/*"
   - "package.json"

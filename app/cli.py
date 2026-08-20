@@ -8,8 +8,8 @@ import json
 import sys
 from pathlib import Path
 
-from .analyzer import pipeline
 from . import exporter
+from .analyzer import pipeline
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -33,6 +33,7 @@ def analyze_single(video: str, outdir: str, **kwargs) -> dict:
         vlm_model=kwargs.get("vlm_model", "gpt-4o"),
         keep_workdir=True,
     )
+    result["_source_path"] = str(Path(video).resolve())
 
     # 写入 JSON
     out_json = outdir / "dna.json"
@@ -72,7 +73,7 @@ def print_summary(result: dict, export_files: dict):
     a = result.get("audio", {})
     shots = result.get("shots", [])
 
-    print(f"[OK] 分析完成")
+    print("[OK] 分析完成")
     print(f"     镜头数: {m.get('total_shots', 0)}")
     print(f"     平均镜头时长: {m.get('avg_shot_duration', 0):.3f}s")
     print(f"     卡点率: {m.get('beat_alignment_ratio', 0) * 100:.0f}%")

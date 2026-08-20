@@ -337,10 +337,20 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
 .toast.error{color:var(--red);border-color:rgba(248,113,113,.35);}
 .toast.info{color:#7aa2ff;border-color:rgba(79,125,255,.35);}
 @keyframes ti{from{opacity:0;transform:translateX(30px)}to{opacity:1;transform:none}}
-.progress{display:none;position:fixed;inset:0;z-index:300;background:rgba(5,6,10,.6);backdrop-filter:blur(10px);align-items:center;justify-content:center;}
+.progress{display:none;position:fixed;right:20px;bottom:20px;z-index:300;align-items:flex-end;justify-content:flex-end;width:340px;max-width:calc(100vw - 40px);}
 .progress.active{display:flex;}
-.progress-box{background:var(--panel);border:1px solid var(--border-2);border-radius:16px;padding:36px 42px;max-width:400px;width:92%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.6);}
-.spinner{width:38px;height:38px;border:3px solid rgba(255,255,255,.08);border-top-color:var(--accent-3);border-right-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px;}
+.progress-box{background:var(--panel);border:1px solid var(--border-2);border-radius:16px;padding:16px 20px;width:100%;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,.65);animation:pop .25s ease;}
+.progress-head{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.progress-head .p-status{font-size:13px;font-weight:650;flex:1;text-align:left;}
+.progress-head .p-sub{font-size:10.5px;color:var(--fg-3);text-align:left;margin:-2px 0 0 48px;}
+.progress-min-btn{background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--fg-2);border-radius:8px;padding:4px 10px;font-size:11px;cursor:pointer;flex-shrink:0;}
+.progress-min-btn:hover{color:var(--fg);background:rgba(255,255,255,.12);}
+.progress-min{display:none;position:fixed;right:20px;bottom:20px;z-index:310;background:var(--panel);border:1px solid var(--border-2);border-radius:999px;padding:9px 16px;box-shadow:0 12px 40px rgba(0,0,0,.55);cursor:pointer;align-items:center;gap:10px;animation:pop .25s ease;}
+.progress-min .spinner{width:16px;height:16px;border-width:2px;margin:0;}
+.progress-min .pm-label{font-size:12px;font-weight:650;}
+.progress-min .pm-pct{font-size:12px;color:var(--accent-3);font-weight:700;font-variant-numeric:tabular-nums;}
+.progress-min:hover{transform:translateY(-1px);}
+.spinner{width:26px;height:26px;border:3px solid rgba(255,255,255,.08);border-top-color:var(--accent-3);border-right-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
 @keyframes spin{to{transform:rotate(360deg)}}
 .progress-box .p-status{font-size:14.5px;font-weight:650;margin-bottom:3px;}
 .progress-box .p-sub{font-size:11.5px;color:var(--fg-3);}
@@ -778,13 +788,23 @@ pre{background:var(--bg-soft);border:1px solid var(--border);border-radius:var(-
 <!-- Toast / Progress -->
 <div class="toast-container" id="toastContainer"></div>
 <div class="progress" id="progressOverlay">
-  <div class="progress-box" style="max-width:560px">
-    <div class="spinner"></div>
-    <div class="p-status" id="pStatus">正在分析...</div>
-    <div class="p-sub" id="pSub">请稍候</div>
+  <div class="progress-box">
+    <div class="progress-head">
+      <div class="spinner"></div>
+      <div style="flex:1;text-align:left">
+        <div class="p-status" id="pStatus">正在分析...</div>
+        <div class="p-sub" id="pSub">请稍候</div>
+      </div>
+      <button class="progress-min-btn" onclick="minimizeProgress()" title="最小化到右下角，可继续操作其他页面">后台 ⤓</button>
+    </div>
     <div class="progress-track"><div class="progress-fill" id="pFill"></div></div>
-    <div class="think-logs" id="thinkLogs" style="margin-top:16px;text-align:left;max-height:220px;display:none"></div>
+    <div class="think-logs" id="thinkLogs" style="margin-top:12px;text-align:left;max-height:180px;display:none"></div>
   </div>
+</div>
+<div class="progress-min" id="progressMinBadge" onclick="restoreProgress()" title="点击查看分析进度" style="display:none">
+  <div class="spinner"></div>
+  <span class="pm-label">分析中</span>
+  <span class="pm-pct" id="pmPct">0%</span>
 </div>
 <script>
 // ── State ──
@@ -835,8 +855,9 @@ function startAnalysis() {
   uploadFile(currentFile);
 }
 
-// ── Progress ──
+// ── Progress（右下角浮动面板，不阻塞页面操作） ──
 function showP(status, sub) {
+  hideMinBadge();
   document.getElementById('progressOverlay').classList.add('active');
   document.getElementById('pStatus').textContent = status || '正在分析...';
   document.getElementById('pSub').textContent = sub || '';
@@ -846,8 +867,28 @@ function updateP(pct, status, sub) {
   document.getElementById('pFill').style.width = Math.min(pct,100) + '%';
   if (status) document.getElementById('pStatus').textContent = status;
   if (sub) document.getElementById('pSub').textContent = sub;
+  // 最小化时同步徽章进度
+  const badge = document.getElementById('progressMinBadge');
+  const pmPct = document.getElementById('pmPct');
+  if (badge && badge.style.display !== 'none' && pmPct) pmPct.textContent = Math.round(pct) + '%';
 }
-function hideP() { document.getElementById('progressOverlay').classList.remove('active'); }
+function hideP() {
+  document.getElementById('progressOverlay').classList.remove('active');
+  hideMinBadge();
+}
+function minimizeProgress() {
+  document.getElementById('progressOverlay').classList.remove('active');
+  const badge = document.getElementById('progressMinBadge');
+  const pmPct = document.getElementById('pmPct');
+  if (pmPct) pmPct.textContent = (document.getElementById('pFill').style.width || '0%');
+  badge.style.display = 'flex';
+  toast('⏳ 分析在后台进行中，可继续操作其他页面', 'info', 2500);
+}
+function restoreProgress() {
+  hideMinBadge();
+  document.getElementById('progressOverlay').classList.add('active');
+}
+function hideMinBadge() { const b = document.getElementById('progressMinBadge'); if (b) b.style.display = 'none'; }
 
 // ── Toast ──
 function toast(msg, type='info', dur=3500) {
@@ -1095,7 +1136,9 @@ async function uploadFile(f) {
     updateP(100, '分析完成！');
     setTimeout(hideP, 500);
     renderResult(data, f);
-    toast('✅ 分析完成！共 ' + (data.meta?.total_shots||0) + ' 个镜头', 'success');
+    const activePanel = document.querySelector('.tab-panel.active');
+    const onAnalyzeTab = activePanel && activePanel.id === 'tab-analyze';
+    toast('✅ 分析完成！共 ' + (data.meta?.total_shots||0) + ' 个镜头' + (onAnalyzeTab ? '' : '，已可在「视频分析」页查看结果'), 'success', 5000);
   } catch (err) {
     hideP();
     toast('❌ ' + err.message, 'error');

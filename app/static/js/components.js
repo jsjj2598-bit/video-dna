@@ -164,7 +164,7 @@ async function deleteModel(id) {
 function renderPlugins() {
   const list = compState.plugins || [];
   const el = document.getElementById('pluginList');
-  if (!list.length) { el.innerHTML = '<div class="empty-state" style="margin:14px 0">未安装插件。插件是一个包含 manifest.json 的 Python 包，可自定义分析逻辑，打包为 ZIP 安装。</div>'; return; }
+  if (!list.length) { el.innerHTML = '<div class="empty-state" style="margin:14px 0">未安装插件。插件是包含 manifest.json 与各平台可执行文件的 ZIP，通过 JSON stdin/stdout 扩展分析结果。</div>'; return; }
   el.innerHTML = list.map(p => `
     <div class="model-row">
       <div class="m-ico">🔌</div>
@@ -286,4 +286,3 @@ function copyOutput() {
   const body = document.getElementById('outputBody');
   navigator.clipboard.writeText(body.textContent).then(() => toast('📋 已复制', 'success')).catch(() => toast('📋 复制失败', 'error'));
 }
-

@@ -1,35 +1,29 @@
 # Contributing
 
-感谢你参与 Video DNA Analyzer。项目当前处于 alpha 阶段，提交应优先保持分析结果、HTTP API 和桌面端行为可验证。
+项目使用 Go + go-zero 后端和 Electron 桌面壳。提交应保持 HTTP JSON、桌面行为和导出格式向后兼容。
 
 ## 开发环境
 
 ```bash
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e ".[asr,dev]"
+go mod download
 npm ci
+npm start
 ```
 
 ## 提交前检查
 
 ```bash
-ruff check app tests
-pytest
-python -m compileall -q app
-node --check electron/main.js
-node --check electron/preload.js
+gofmt -w app internal pkg scripts service
+go test -race ./...
+go vet ./...
+npm test
 for file in app/static/js/*.js; do node --check "$file"; done
 ```
 
-涉及分析算法或导出格式的变更必须增加回归测试。涉及 EDL、XML、SRT 或剪映草稿的变更，还应说明使用哪个外部软件和版本完成了导入验证。
+## 约定
 
-## 代码组织
-
-- `app/api/routes/`：HTTP 输入输出，不放分析算法和文件系统细节。
-- `app/services/`：任务、存储、模板和分析用例。
-- `app/core/`：配置、安全和全局常量。
-- `app/analyzer/`：纯视频/音频分析能力。
-- `tests/`：纯函数测试、服务测试和 API 回归测试。
-
-请避免重新引入“最近一次任务”全局变量、请求间共享 API Key、静默吞掉异常或在路由中直接拼接用户文件路径。
+- `videodna.api` 是 HTTP 契约源，接口变更先改契约再运行 goctl。
+- handler 只处理 HTTP 输入输出；logic 编排用例；service 负责领域能力和持久化。
+- FFmpeg、AI 服务等第三方集成只放在 `pkg/x*`，业务层不直接拼第三方请求。
+- 不使用包级“最近任务”、跨请求共享密钥或未经校验的用户路径。
+- 算法、存储、导出或模板变更必须补 Go 回归测试。

@@ -10,14 +10,14 @@ files:
   - "electron/**/*"
   - "package.json"
 
-# 将 PyInstaller 编译的后端打进安装包（Windows 为 resources/backend.exe，macOS 为 resources/backend）
-# filter 会复制 dist 下存在的 backend / backend.exe；未编译时删除此段即可
+# Go 后端与 FFmpeg 工具链放到 resources；后端会自动从 resources/tools 发现工具。
 extraResources:
   - from: dist
     to: .
     filter:
       - backend
       - backend.exe
+      - tools/**/*
 
 win:
   target:

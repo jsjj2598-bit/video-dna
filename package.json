@@ -1,13 +1,22 @@
 {
   "name": "video-dna-analyzer",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Video Editing Structure Reverse-Engineering Engine — Desktop App",
   "main": "electron/main.js",
   "scripts": {
-    "start": "electron .",
-    "build:win": "electron-builder --win nsis portable --config electron/builder.yml",
+    "start": "npm run build:backend && electron .",
+    "dev:backend": "go run ./service/videodna/api -f service/videodna/api/etc/videodna.yaml",
+    "build:backend": "node scripts/build-backend.js",
+    "build:backend:win": "node scripts/build-backend.js windows amd64",
+    "prepare:tools": "go run ./scripts/prepare_ffmpeg.go",
+    "prepare:tools:win": "go run ./scripts/prepare_ffmpeg.go windows",
+    "build:win": "electron-builder --win --x64 --config electron/builder.yml",
     "build:mac": "electron-builder --mac --config electron/builder.yml",
-    "build:linux": "electron-builder --linux --config electron/builder.yml"
+    "build:linux": "electron-builder --linux --config electron/builder.yml",
+    "package:win": "npm run prepare:tools:win && npm run build:backend:win && npm run build:win",
+    "package:mac": "npm run prepare:tools && npm run build:backend && npm run build:mac",
+    "package:linux": "npm run prepare:tools && npm run build:backend && npm run build:linux",
+    "test": "go test ./... && node --check electron/main.js && node --check electron/preload.js"
   },
   "author": "Video DNA Team",
   "license": "MIT",

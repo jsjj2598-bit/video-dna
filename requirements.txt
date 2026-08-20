@@ -1,3 +1,0 @@
-# Compatibility entry point for existing setup and packaging scripts.
-# Base/runtime dependencies are declared in pyproject.toml.
--e .[asr]

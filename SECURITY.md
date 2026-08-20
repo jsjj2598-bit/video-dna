@@ -1,17 +1,15 @@
 # Security Policy
 
-## Supported version
+当前仅维护 `master` 最新版本。
 
-当前仅维护 `master` 上的最新版本。项目仍处于 alpha 阶段。
+## 部署建议
 
-## Deployment guidance
+- 默认只监听 `127.0.0.1`；暴露到其他设备时必须设置高强度 `VIDEODNA_API_TOKEN` 并由可信反向代理提供 TLS。
+- 模型 API Key 仅保存在权限受限的本地配置文件，列表接口只返回 `has_api_key`。
+- 插件是具有当前用户完整权限的可执行代码，只安装可信来源。
+- 不要共享应用数据目录、模型配置、源视频或草稿导出目录。
+- Windows 打包脚本固定 FFmpeg 发布标签并校验仓库记录的 SHA-256。
 
-- 默认只在 `127.0.0.1` 上运行。
-- 如需从其他设备访问，必须设置高强度随机 `VIDEODNA_API_TOKEN`，并通过受信任的反向代理提供 TLS。
-- 不要安装来源不明的插件。插件是具有当前用户完整权限的 Python 代码。
-- 不要把应用数据目录、模型配置或源视频目录共享给不受信任用户。
+## 漏洞报告
 
-## Reporting a vulnerability
-
-请通过 GitHub Security Advisory 私下报告，不要在公开 Issue 中附带 API Key、源视频、利用代码或个人路径。报告应包含受影响版本、复现步骤、影响范围和建议缓解方式。
-
+请使用 GitHub Security Advisory 私下报告，不要在公开 Issue 中附带 API Key、个人路径、源视频或可直接利用的代码。报告应包含受影响版本、复现步骤、影响范围和建议缓解方式。

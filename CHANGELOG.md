@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-20
+
+### Changed
+
+- 后端从 Python/FastAPI/PyInstaller 迁移到 Go 1.25 + go-zero，UI 内嵌到单个后端可执行文件。
+- API 使用 goctl 契约生成 handler/logic/types 骨架，并按 handler、logic、service、`pkg/x*` 分层。
+- 视频分析改为 FFmpeg/FFprobe 外部工具 + 纯 Go 音频节奏与图像启发式，不依赖 CGO。
+- 插件协议改为跨平台可执行文件的 JSON stdin/stdout 协议。
+- GitHub Actions 改为 Go 测试、交叉编译和 Electron 安装包流程。
+
+### Added
+
+- Windows FFmpeg 自动下载、SHA-256 校验和安装包内置流程。
+- Go 导出、模板、存储、任务状态回归测试。
+- 可直接从 macOS/Linux/Windows 交叉编译的 Windows `backend.exe`。
+
+### Removed
+
+- Python 服务、虚拟环境依赖、PyInstaller 配置和 Python 测试链。
+
 ## [0.3.1] - 2026-08-20
 
 ### Changed

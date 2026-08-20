@@ -1,88 +1,47 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-*.egg
+# Go
+/videodna
+*.test
+*.out
+coverage/
 
-# Node
+# Node / Electron
 node_modules/
 dist/
+electron/dist/
+app.asar
+*.dmg
+*.pkg
+*.blockmap
 
-# Data
+# Local application data and build output
 uploads/
 output*/
-test_data/speech*.wav
-test_data/bg.mp4
-test_data/*.wav
-test_data/tseg_*.mp4
-test_data/ab.mp4
-test_data/click.wav
-
-# Temp / Debug
+build/
 debug_*/
 *.tmp
 *.temp
-_test.jpg
-_api_result*.json
-check_*.py
-test_*.py
-!tests/
-!tests/**/*.py
 
-# IDE
+# Generated media used by local experiments
+test_data/*.wav
+test_data/tseg_*.mp4
+test_data/ab.mp4
+test_data/bg.mp4
+
+# Secrets
+.env
+.github_token
+
+# Editors / operating systems
 .vscode/
 .idea/
 *.swp
 *.swo
-
-# OS
 .DS_Store
 Thumbs.db
 Desktop.ini
 
-# Electron build
-dist/win-unpacked/
-dist/*.exe
-dist/*.blockmap
-dist/builder-*.yml
-electron/icon.ico
-electron/icon.icns
-electron/icon.png
-
-# Secrets
-.github_token
-.env
-fix_*.py
-# Build artifacts
-backend.spec
-backend_entry.py
-build/
-
-# Temp scripts
-do_git.py
-fix_*.py
-clean_git.py
-build/
-check_status.py
-check_push.py
-git_push.py
-git_push_final.py
-do_commit_push.py
-do_final_push.py
-final_commit_shutdown.py
-release_upload.py
-git_result.txt
-git_out.txt
-git_log.txt
-git_log2.txt
-
-# Electron build artifacts (repo root)
-app.asar
-electron/dist/
-*.dmg
-*.pkg
-
-build_log.txt
+# Legacy local caches are ignored during migration checkouts
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/

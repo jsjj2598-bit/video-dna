@@ -1,4 +1,4 @@
-﻿name: Build Installers
+name: Build Installers
 
 on:
   workflow_dispatch:
@@ -6,90 +6,26 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
 jobs:
-  backend-win:
-    name: Backend (Windows)
+  windows:
+    name: Windows installer
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: "3.11"
-      - name: Build backend.exe
-        shell: pwsh
-        run: |
-          python -m venv .venv
-          .venv\Scripts\python -m pip install --upgrade pip
-          .venv\Scripts\pip install -r requirements.txt pyinstaller
-          .venv\Scripts\pyinstaller --onefile --clean --name backend `
-            --distpath dist --workpath output\pybuild --specpath output `
-            --add-data "${{ github.workspace }}\app\static;app/static" run_backend.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: backend-win
-          path: dist/backend.exe
-
-  backend-mac-arm64:
-    name: Backend (macOS arm64)
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Build backend (arm64)
-        run: |
-          python3 -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-          rm -f dist/backend
-          pyinstaller --onefile --clean --name backend \
-            --distpath dist --workpath output/pybuild --specpath output \
-            --add-data "${{ github.workspace }}/app/static:app/static" run_backend.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: backend-mac-arm64
-          path: dist/backend
-
-  backend-mac-x64:
-    name: Backend (macOS x64)
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Build backend (x64)
-        run: |
-          python3 -m venv .venv
-          source .venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt pyinstaller
-          rm -f dist/backend
-          pyinstaller --onefile --clean --name backend \
-            --distpath dist --workpath output/pybuild --specpath output \
-            --add-data "${{ github.workspace }}/app/static:app/static" run_backend.py
-      - uses: actions/upload-artifact@v4
-        with:
-          name: backend-mac-x64
-          path: dist/backend
-
-  app-win:
-    name: Installer (Windows)
-    needs: backend-win
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
+          go-version-file: go.mod
+          cache: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/download-artifact@v4
-        with:
-          name: backend-win
-          path: dist
-      - run: npm ci
-      - run: npm run build:win
+          cache: npm
+      - run: go test ./...
+      - run: npm ci --ignore-scripts
+      - run: npm run package:win
       - uses: actions/upload-artifact@v4
         with:
           name: installers-win
@@ -97,20 +33,22 @@ jobs:
             dist/Video DNA Analyzer Setup *.exe
             dist/Video DNA Analyzer *.exe
 
-  app-mac-arm64:
-    name: Installer (macOS arm64)
-    needs: backend-mac-arm64
+  macos-arm64:
+    name: macOS arm64 installer
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/download-artifact@v4
-        with:
-          name: backend-mac-arm64
-          path: dist
-      - run: npm ci
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run prepare:tools
+      - run: npm run build:backend
       - run: npx electron-builder --mac --arm64 --config electron/builder.yml
       - uses: actions/upload-artifact@v4
         with:
@@ -119,20 +57,22 @@ jobs:
             dist/*.dmg
             dist/*.zip
 
-  app-mac-x64:
-    name: Installer (macOS x64)
-    needs: backend-mac-x64
+  macos-x64:
+    name: macOS x64 installer
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - uses: actions/download-artifact@v4
-        with:
-          name: backend-mac-x64
-          path: dist
-      - run: npm ci
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run prepare:tools
+      - run: npm run build:backend
       - run: npx electron-builder --mac --x64 --config electron/builder.yml
       - uses: actions/upload-artifact@v4
         with:

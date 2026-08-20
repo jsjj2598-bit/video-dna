@@ -1,7 +1,7 @@
 /**
  * Video DNA Analyzer — Electron Desktop Main Process
  * 
- * Spawns the Python FastAPI backend as a child process,
+ * Spawns the standalone Go backend as a child process,
  * opens a native window, and cleans up on exit.
  */
 const { app, BrowserWindow, Menu, dialog, ipcMain, shell } = require('electron');
@@ -78,30 +78,8 @@ function log(...args) {
   try { fs.appendFileSync(LOG_FILE, line + '\n'); } catch (_) {}
 }
 
-let pythonProcess = null;
+let backendProcess = null;
 let mainWindow = null;
-
-// ── Detect Python executable ──
-function findPython() {
-  const candidates = [];
-  const root = app.isPackaged
-    ? process.resourcesPath
-    : path.resolve(__dirname, '..');
-  if (process.platform === 'win32') {
-    candidates.push(path.join(root, '.venv', 'Scripts', 'python.exe'));
-    candidates.push(path.join(root, '.venv', 'Scripts', 'python3.exe'));
-    candidates.push(path.join(root, 'venv', 'Scripts', 'python.exe'));
-    candidates.push('python');
-    candidates.push('python3');
-  } else {
-    candidates.push(path.join(root, '.venv', 'bin', 'python'));
-    candidates.push(path.join(root, '.venv', 'bin', 'python3'));
-    candidates.push(path.join(root, 'venv', 'bin', 'python'));
-    candidates.push('python3');
-    candidates.push('python');
-  }
-  return candidates;
-}
 
 function isBackendUp() {
   return new Promise((resolve) => {
@@ -124,7 +102,6 @@ function isBackendUp() {
 }
 
 function findBackendExe() {
-  // macOS 下 PyInstaller onefile 产物无 .exe 后缀
   const name = process.platform === 'win32' ? 'backend.exe' : 'backend';
   const exe = app.isPackaged
     ? path.join(process.resourcesPath, name)
@@ -134,41 +111,19 @@ function findBackendExe() {
 }
 
 function startBackend() {
-  const cwd = path.resolve(__dirname, '..');
-
-  // 若后端已在运行（如 start_desktop.cmd 已启动 uvicorn），跳过启动避免端口冲突
-  if (pythonProcess) return pythonProcess;
+  if (backendProcess) return backendProcess;
 
   const backendExe = findBackendExe();
-  let spawnCommand = null;
-
-  if (fs.existsSync(backendExe)) {
-    spawnCommand = {
-      cmd: backendExe,
-      args: [],
-      cwd: path.dirname(backendExe),
-    };
-  } else {
-    // 未编译 backend.exe 时，回退到 .venv 的 Python 源码启动
-    const pyCandidates = process.platform === 'win32'
-      ? [path.join(cwd, '.venv', 'Scripts', 'python.exe'), 'python']
-      : [path.join(cwd, '.venv', 'bin', 'python'), 'python3'];
-    const py = pyCandidates.find((p) => p === 'python' || p === 'python3' || fs.existsSync(p));
-    if (!py) {
-      console.error('[electron] 未找到 Python 解释器（.venv 或系统 python）');
-      return null;
-    }
-    spawnCommand = {
-      cmd: py,
-      args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(PORT), '--log-level', 'warning'],
-      cwd,
-    };
+  if (!fs.existsSync(backendExe)) {
+    log('Go backend executable missing:', backendExe);
+    return null;
   }
+  const spawnCommand = { cmd: backendExe, args: [], cwd: path.dirname(backendExe) };
 
   console.log(`[electron] Starting backend: ${spawnCommand.cmd} ${spawnCommand.args.join(' ')}`);
   log('spawning:', spawnCommand.cmd, spawnCommand.args.join(' '), 'cwd=' + spawnCommand.cwd);
 
-  pythonProcess = spawn(spawnCommand.cmd, spawnCommand.args, {
+  backendProcess = spawn(spawnCommand.cmd, spawnCommand.args, {
     cwd: spawnCommand.cwd,
     stdio: ['ignore', 'pipe', 'pipe'],
     env: {
@@ -180,28 +135,28 @@ function startBackend() {
     windowsHide: true,
   });
 
-  pythonProcess.on('error', (err) => {
+  backendProcess.on('error', (err) => {
     log('SPAWN_ERROR:', err.message);
     console.error('[electron] spawn error:', err.message);
-    pythonProcess = null;
+    backendProcess = null;
   });
 
-  pythonProcess.stdout.on('data', (data) => {
+  backendProcess.stdout.on('data', (data) => {
     console.log(`[backend] ${data.toString().trim()}`);
     try { fs.appendFileSync(LOG_FILE, '[backend] ' + data.toString().trim() + '\n'); } catch (_) {}
   });
 
-  pythonProcess.stderr.on('data', (data) => {
+  backendProcess.stderr.on('data', (data) => {
     console.error(`[backend:err] ${data.toString().trim()}`);
     try { fs.appendFileSync(LOG_FILE, '[backend:err] ' + data.toString().trim() + '\n'); } catch (_) {}
   });
 
-  pythonProcess.on('exit', (code) => {
+  backendProcess.on('exit', (code) => {
     console.log(`[electron] Backend exited with code ${code}`);
-    pythonProcess = null;
+    backendProcess = null;
   });
 
-  return pythonProcess;
+  return backendProcess;
 }
 
 function waitForBackend(retries = 30, interval = 500) {
@@ -372,7 +327,7 @@ app.whenReady().then(async () => {
 <script>
 let tries = 0;
 setInterval(() => {
-  fetch('http://127.0.0.1:8000/health', { cache: 'no-store' })
+  fetch('${BACKEND_URL}/health', { cache: 'no-store' })
     .then((r) => { if (r.ok) location.href='${frontendUrl()}'; })
     .catch(() => {});
 }, 5000);
@@ -391,11 +346,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('will-quit', () => {
-  if (pythonProcess) {
+  if (backendProcess) {
     console.log('[electron] Killing backend process');
-    pythonProcess.kill('SIGTERM');
+    backendProcess.kill('SIGTERM');
     setTimeout(() => {
-      if (pythonProcess) pythonProcess.kill('SIGKILL');
+      if (backendProcess) backendProcess.kill('SIGKILL');
     }, 3000).unref();
   }
 });

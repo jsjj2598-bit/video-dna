@@ -1,0 +1,21 @@
+Name: VideoDNA
+Host: 127.0.0.1
+Port: 8000
+Timeout: 1800000
+MaxBytes: 2147483648
+DataDir: ""
+Auth:
+  Token: ""
+FFmpeg:
+  Binary: ""
+  Probe: ""
+Limits:
+  MaxUploadBytes: 2147483648
+  MaxHistoryBytes: 8589934592
+  TaskTTLSeconds: 86400
+  PluginBytes: 52428800
+Analysis:
+  Workers: 1
+  SceneThreshold: 0.27
+  AdaptiveThreshold: 0.18
+  MinShotSeconds: 0.25

@@ -1,210 +1,115 @@
 # Video DNA Analyzer
 
-本地优先的视频剪辑结构分析工具。它把一支成片拆解为镜头、转场、节拍、台词、关键帧和语义标签，并输出可继续处理的剪辑 DNA 数据。
+本地优先的视频剪辑结构分析桌面应用。后端自 `v0.4.0` 起使用 Go + go-zero，前端保留 Electron 桌面壳；一个 Go 可执行文件内嵌 UI，运行时只依赖 FFmpeg/FFprobe，不再需要 Python、虚拟环境或 PyInstaller。
 
-> 项目当前处于 alpha 阶段。基础分析和 Cutmark/SRT 可用于实际工作流；EDL、FCP7 XML 和剪映草稿在正式生产使用前，应使用目标剪辑软件完成兼容性验证。
+## 能力
 
-## 功能
+- FFprobe 元信息、FFmpeg 场景分数镜头切分与关键帧提取
+- 纯 Go 流式音频能量、瞬态、BPM、节拍和静音区间分析
+- 纯 Go 关键帧亮度/色彩/细节启发式描述，可选 OpenAI 兼容视觉模型
+- 分析历史、Range 视频回放、任务进度与本地容量清理
+- EDL、FCP7 XML、Cutmark JSON、SRT、ZIP 和剪映草稿导出
+- 模型、组件、技能和跨平台可执行插件注册
+- Windows/macOS Electron 安装包与 Windows 后端交叉编译
 
-- PySceneDetect 镜头切分和 OpenCV 转场分类。
-- librosa HPSS、BPM、节拍、静音和强瞬态分析。
-- 可选 faster-whisper 台词转写，失败时降级为能量区域检测。
-- OpenCV 启发式镜头标签，或接入 OpenAI、通义千问、Ollama/OpenAI 兼容视觉模型。
-- 可交互时间轴、关键帧、历史回看和视频 Range 播放。
-- EDL、FCP7 XML、Cutmark JSON、SRT 和剪映草稿导出。
-- 内置节奏模板、分镜脚本和 BGM 风格建议。
-- CLI、FastAPI Web 服务和 Electron 桌面端。
+## 快速开始
 
-## 运行要求
-
-- Python 3.10–3.12，推荐 Python 3.11。
-- FFmpeg/ffprobe 5.0 或更高版本。
-- Node.js 18 或更高版本，仅桌面端需要。
-
-## 安装
-
-基础分析环境：
+需要 Go 1.25、Node.js 20+、FFmpeg 和 FFprobe。
 
 ```bash
-git clone https://github.com/jsjj2598-bit/video-dna.git
-cd video-dna
-python3.11 -m venv .venv
-source .venv/bin/activate           # Windows: .venv\Scripts\activate
-pip install -e .
-```
-
-包含 Whisper ASR：
-
-```bash
-pip install -e ".[asr]"
-```
-
-开发环境：
-
-```bash
-pip install -e ".[asr,dev]"
 npm ci
-```
-
-## 使用
-
-### CLI
-
-```bash
-video-dna input.mp4 -o output --export all
-
-# 不提取关键帧或不做语义描述
-video-dna input.mp4 -o output --no-keyframes --no-describe
-
-# 批量分析目录
-video-dna --input-dir ./videos -o output --export srt
-```
-
-### Web 服务
-
-```bash
-uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-打开 <http://127.0.0.1:8000>。默认只建议本机使用。
-
-如确实需要通过其他设备访问，应配置随机 Token 并在受信任的 TLS 反向代理后运行：
-
-```bash
-export VIDEODNA_API_TOKEN="replace-with-a-long-random-secret"
-uvicorn app.main:app --host 0.0.0.0 --port 8000
-```
-
-所有 `/api/*` 请求需携带：
-
-```text
-X-VideoDNA-Token: replace-with-a-long-random-secret
-```
-
-使用内置 Web UI 时，可首次访问 `http://主机:8000/?token=...`。服务校验后会写入仅同源使用的 HttpOnly Cookie，页面随后会从地址栏移除 Token。
-
-### Electron 桌面端
-
-```bash
 npm start
 ```
 
-桌面端会启动本地后端。原生文件选择使用流式 multipart 上传，不会再把整个视频转换成 Base64 放进 IPC。
+`npm start` 会先构建当前平台的 `dist/backend`（Windows 为 `backend.exe`），再打开 Electron 窗口。开发后端可单独启动：
+
+```bash
+go run ./service/videodna/api -f service/videodna/api/etc/videodna.yaml
+```
+
+浏览器访问 `http://127.0.0.1:8000` 只是调试方式；正式使用入口是 Electron 桌面窗口。UI 由 Go 可执行文件内嵌并通过本机 HTTP 提供，不是部署到公网的网站。
+
+## 构建
+
+```bash
+# 当前平台的独立 Go 后端
+npm run build:backend
+
+# 在 macOS/Linux/Windows 上交叉编译 64 位 Windows 后端
+npm run build:backend:win
+
+# 完整 Windows 安装包/便携版；自动下载固定版静态 FFmpeg/FFprobe、校验 SHA-256
+npm run package:win
+
+# 当前 Mac 或 Linux 安装包
+npm run package:mac
+npm run package:linux
+```
+
+Windows FFmpeg/FFprobe 固定使用 [ffmpeg-static b6.1.1](https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1) 发布物。构建脚本校验仓库固定的 SHA-256，把工具放到 `dist/tools`，Electron 再打进 `resources/tools`；首次下载后存入用户缓存。
+
+> Windows 的 Go 后端可以在任意系统直接交叉编译。Electron 的完整 Windows 安装器通常也可跨平台生成，但遇到签名、NSIS 或平台工具限制时，使用仓库的 `Build Installers` GitHub Actions 最稳定。
 
 ## 配置
 
-| 环境变量 | 默认值 | 说明 |
-|---|---:|---|
-| `VIDEODNA_DATA_DIR` | 平台用户数据目录 | 配置、插件、上传历史和下载目录 |
-| `VIDEODNA_MAX_UPLOAD_BYTES` | 2GB | 单个上传文件上限 |
-| `VIDEODNA_MAX_HISTORY_BYTES` | 8GB | 历史数据总量上限 |
-| `VIDEODNA_TASK_TTL_SECONDS` | 24 小时 | 完成任务进度在内存中的保留时间 |
-| `VIDEODNA_API_TOKEN` | 空 | 配置后启用 API Token 校验 |
+默认配置见 `service/videodna/api/etc/videodna.yaml`。独立可执行文件找不到 YAML 时会使用安全的桌面默认值。
 
-平台默认数据目录：
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `VIDEODNA_HOST` | `127.0.0.1` | 监听地址 |
+| `VIDEODNA_PORT` | `8000` | 本机端口 |
+| `VIDEODNA_DATA_DIR` | 平台用户数据目录 | 配置、插件、历史与下载目录 |
+| `VIDEODNA_API_TOKEN` | 空 | 非空时保护所有 `/api` 接口 |
+| `VIDEODNA_FFMPEG` | 自动发现 | FFmpeg 可执行文件路径 |
+| `VIDEODNA_FFPROBE` | 自动发现 | FFprobe 可执行文件路径 |
+
+数据目录：
 
 - macOS：`~/Library/Application Support/Video DNA Analyzer`
-- Windows：`%LOCALAPPDATA%\Video DNA Analyzer`
+- Windows：`%LOCALAPPDATA%/Video DNA Analyzer`
 - Linux：`$XDG_DATA_HOME/video-dna-analyzer` 或 `~/.local/share/video-dna-analyzer`
 
-## 项目架构
+## 代码结构
 
 ```text
 app/
-├── api/
-│   ├── router.py                 # 路由组合
-│   └── routes/
-│       ├── analysis.py           # 分析提交、进度和结果
-│       ├── media.py              # 历史、关键帧、视频流
-│       ├── exports.py            # EDL/XML/JSON/SRT 导出
-│       ├── studio.py             # 模板、草稿、分镜、BGM
-│       └── components.py         # 模型、组件、技能、插件
-├── core/
-│   ├── config.py                 # 版本、环境变量和平台目录
-│   └── security.py               # 可选 Token 认证
-├── services/
-│   ├── analysis.py               # 分析用例编排
-│   ├── storage.py                # 上传、结果和历史持久化
-│   ├── tasks.py                  # 有界线程安全进度状态
-│   └── templates.py              # 节奏模板和切点映射
-├── analyzer/                     # 镜头、音频、ASR、VLM 算法
-├── static/
-│   ├── index.html
-│   ├── app.css
-│   └── js/                        # core/history/analysis/components/studio
-├── main.py                       # FastAPI 应用工厂
-├── exporter.py
-├── draft.py
-├── registry.py
-└── cli.py
-electron/                         # 桌面端进程和打包配置
-tests/                            # 回归测试
+  embed.go + static/                 内嵌桌面 UI
+electron/                            Electron 主进程、预加载与安装包配置
+internal/platform/                   平台路径
+pkg/xaiapi/                          OpenAI 兼容第三方调用封装
+pkg/xffmpeg/                         FFmpeg/FFprobe 进程封装
+service/videodna/api/
+  videodna.api                       goctl 契约（接口先行）
+  etc/                               go-zero 配置
+  internal/handler/                  HTTP 解析与响应
+  internal/logic/                    用例编排
+  internal/service/                  分析、存储、任务、导出、模板、注册表
+scripts/                             跨平台后端与 FFmpeg 准备脚本
 ```
 
-设计约束：
-
-- 路由只处理 HTTP 输入输出，不直接维护任务全局状态。
-- 后续操作必须使用 `session_id`，不依赖“最近一次分析”。
-- API Key 按请求或模型客户端传递，不写入进程级临时环境变量。
-- 完整结果保存到 session 的 `result.json`，内存只保存有限进度日志。
-- 用户数据不写入源代码目录或桌面应用安装目录。
-
-## 分析输出
-
-```json
-{
-  "meta": {
-    "duration": 10.0,
-    "fps": 30.0,
-    "resolution": "640x360",
-    "total_shots": 4,
-    "avg_shot_duration": 2.5,
-    "beat_alignment_ratio": 0.75,
-    "transitions": { "cut": 3 }
-  },
-  "audio": {
-    "tempo_bpm": 117.45,
-    "beats": [1.022, 1.533],
-    "speech_regions": []
-  },
-  "shots": [
-    {
-      "index": 0,
-      "start": 0.0,
-      "end": 2.0,
-      "transition": "cut",
-      "beat_aligned": true,
-      "content": "远景·暖色调·固定",
-      "keyframe": "shot_000.jpg"
-    }
-  ],
-  "summary": "共 4 个镜头……"
-}
-```
-
-## 测试与质量检查
+目录和生成流程参考 go-zero 的常规服务约定：先修改 `videodna.api`，再运行：
 
 ```bash
-ruff check app tests
-pytest
-python -m compileall -q app
-node --check electron/main.js
-node --check electron/preload.js
-for file in app/static/js/*.js; do node --check "$file"; done
+cd service/videodna/api
+goctl api validate --api videodna.api
+goctl api go --api videodna.api --dir . --style go_zero
 ```
 
-涉及导出格式的提交，除自动化测试外，还应在目标剪辑软件中完成导入验证。
+生成后必须保留已有业务实现，建议在独立分支对比生成差异，不要直接覆盖生产 logic。
 
-## 安全
+## 测试
 
-- 不要把未设置 Token 的服务暴露到局域网或公网。
-- 插件是具有当前用户完整权限的 Python 代码，只安装可信插件。
-- HTTP 模型列表不会返回明文 API Key；配置文件仍应被视为敏感数据。
-- 安全问题请参考 [SECURITY.md](SECURITY.md)。
+```bash
+npm test
+go test -race ./...
+go vet ./...
+```
 
-## 参与贡献
+CI 同时检查 Go 测试、Go vet、后端构建、Electron/前端 JavaScript 语法和 npm 高危漏洞。
 
-开发流程和代码组织约束见 [CONTRIBUTING.md](CONTRIBUTING.md)，问题与优化路线见 [BUGS_AND_OPTIMIZATIONS.md](BUGS_AND_OPTIMIZATIONS.md)。
+## 插件协议
+
+插件 ZIP 必须包含 `manifest.json` 和目标平台可执行文件。后端执行入口时把完整 DNA JSON 写入 stdin，插件把修改后的完整 DNA JSON 写到 stdout。插件拥有当前用户权限，只安装可信来源；安装器会限制文件数、解压大小、路径穿越和符号链接。
 
 ## License
 

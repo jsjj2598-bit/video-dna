@@ -66,10 +66,20 @@ def build_draft_content(
     segments = []
     audio_segments = []
     cursor = 0
-    for c in cuts:
+    for raw_c in cuts:
         seg_id = _uuid()
-        seg_dur = _usec(max(c["end"] - c["start"], 0.01))
-        source_start = _usec(c["start"])
+        try:
+            cs = max(0.0, float(raw_c.get("start") or 0.0))
+            ce = max(0.0, float(raw_c.get("end") or 0.0))
+        except (ValueError, TypeError, AttributeError):
+            cs, ce = 0.0, 0.0
+        if duration > 0:
+            cs = min(cs, duration)
+            ce = min(ce, duration)
+        if ce <= cs:
+            continue  # 跳过非法/空区间
+        seg_dur = _usec(ce - cs)
+        source_start = _usec(cs)
         base = {
             "id": seg_id,
             "target_timeline": {"duration": seg_dur, "start": cursor, "speed": 1},
@@ -240,8 +250,13 @@ def export_draft_folder(
             media_name = src.name
     media_path = str(media_dst.resolve()).replace("\\", "/")
 
-    width = int(probe_info.get("resolution", "0x0").split("x")[0] or 0)
-    height = int(probe_info.get("resolution", "0x0").split("x")[1] or 0)
+    # 分辨率缺失时回退到 1920x1080（避免 None 崩溃）
+    try:
+        w_s, h_s = (probe_info.get("resolution") or "1920x1080").split("x")
+        width = int(w_s or 1920)
+        height = int(h_s or 1080)
+    except (ValueError, TypeError, AttributeError):
+        width, height = 1920, 1080
 
     content = build_draft_content(
         name=name,

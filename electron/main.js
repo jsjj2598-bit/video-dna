@@ -171,7 +171,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,   // 加载本地后端页面需要，仅限本机
+      // 应用仅加载同源 http://127.0.0.1:8000，无需关闭 webSecurity
     },
   });
   console.log('Loading backend URL directly...');
@@ -277,6 +277,26 @@ app.whenReady().then(async () => {
       }
       return true;
     } catch (_) { return false; }
+  });
+
+  // 菜单「打开视频…」→ 前端需要拿到文件内容构建 File 上传
+  ipcMain.handle('dialog:readFile', async (_event, filePath) => {
+    try {
+      const p = path.resolve(String(filePath || ''));
+      const st = fs.statSync(p);
+      if (!st.isFile()) return null;
+      if (st.size > 500 * 1024 * 1024) return { error: '文件超过 500MB 上限' };
+      const buf = fs.readFileSync(p);
+      const ext = path.extname(p).toLowerCase().slice(1);
+      return {
+        name: path.basename(p),
+        ext,
+        size: buf.length,
+        data: buf.toString('base64'),
+      };
+    } catch (e) {
+      return { error: e.message };
+    }
   });
 
   const alreadyUp = await isBackendUp();

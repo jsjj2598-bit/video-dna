@@ -8,9 +8,10 @@ import time
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
+from starlette.background import BackgroundTask
 
 from .analyzer import pipeline
 from .analyzer import ffmpeg_utils
@@ -59,17 +60,75 @@ def _progress_state(session_id: str) -> dict:
 
 
 def _progress_cb(session_id: str, stage: str, pct: int, message: str) -> None:
-    st = _progress_state(session_id)
-    st["stage"] = stage
-    st["pct"] = max(st["pct"], int(pct))
-    st["logs"].append({
-        "t": time.strftime("%H:%M:%S"),
-        "stage": stage,
-        "pct": int(pct),
-        "msg": message,
-    })
-    if len(st["logs"]) > 200:
-        st["logs"] = st["logs"][-200:]
+    with _progress_lock:
+        st = _progress.get(session_id)
+        if st is None:
+            st = {"stage": "idle", "pct": 0, "logs": []}
+            _progress[session_id] = st
+        st["stage"] = stage
+        st["pct"] = max(st["pct"], int(pct))
+        st["logs"].append({
+            "t": time.strftime("%H:%M:%S"),
+            "stage": stage,
+            "pct": int(pct),
+            "msg": message,
+        })
+        if len(st["logs"]) > 200:
+            st["logs"] = st["logs"][-200:]
+
+
+def _safe_join(base: Path, name: str) -> Path:
+    """把 name 安全解析到 base 目录下：拒绝路径穿越与 Windows 绝对路径绕过。"""
+    base = base.resolve()
+    p = (base / name).resolve()
+    if p == base or base not in p.parents:
+        raise HTTPException(status_code=400, detail="非法参数")
+    return p
+
+
+def _apply_env(openai_key: str | None, qwen_key: str | None) -> dict:
+    """仅对当前分析流程注入 API Key，记录原值以便恢复（不污染全局环境）。"""
+    prev = {}
+    for name, val in (("OPENAI_API_KEY", openai_key), ("DASHSCOPE_API_KEY", qwen_key)):
+        if val:
+            prev[name] = os.environ.get(name)
+            os.environ[name] = val
+    return prev
+
+
+def _restore_env(prev: dict) -> None:
+    for name, val in prev.items():
+        if val is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = val
+
+
+UPLOADS_MAX_BYTES = 8 * 1024 * 1024 * 1024  # uploads 总量上限 8GB，超出自动清理最旧
+
+
+def _cleanup_old_uploads(keep: Path | None = None) -> None:
+    """按总量上限清理历史 uploads（保留正在使用的 session）。"""
+    if not UPLOAD_DIR.exists():
+        return
+    try:
+        dirs = [d for d in UPLOAD_DIR.iterdir() if d.is_dir()]
+        total = sum(sum(f.stat().st_size for f in d.rglob("*") if f.is_file()) for d in dirs)
+        if total <= UPLOADS_MAX_BYTES:
+            return
+        dirs.sort(key=lambda d: d.stat().st_mtime)
+        for d in dirs:
+            if keep is not None and d.resolve() == keep.resolve():
+                continue
+            try:
+                shutil.rmtree(d, ignore_errors=True)
+                total -= sum(f.stat().st_size for f in d.rglob("*") if f.is_file())
+            except Exception:
+                pass
+            if total <= UPLOADS_MAX_BYTES:
+                break
+    except Exception:
+        pass
 
 
 def _build_cut_plan(template_dna: dict, target_dna: dict) -> dict:
@@ -181,11 +240,8 @@ async def analyze_video(
     if backend not in ("auto", "openai", "qwen", "heuristic"):
         raise HTTPException(status_code=400, detail="backend 只能是 auto / openai / qwen / heuristic")
 
-    # 前端可在设置页配置 API Key，仅注入本次请求进程环境（不落盘）
-    if openai_key:
-        os.environ["OPENAI_API_KEY"] = openai_key
-    if qwen_key:
-        os.environ["DASHSCOPE_API_KEY"] = qwen_key
+    # 前端可在设置页配置 API Key，仅注入本次分析流程（结束后恢复，不污染全局环境）
+    prev_env = _apply_env(openai_key, qwen_key)
 
     session_id = (session_id or uuid.uuid4().hex).strip()
     if not session_id.replace("-", "").isalnum():
@@ -236,7 +292,9 @@ async def analyze_video(
             st["stage"] = "error"
             st["logs"].append({"t": time.strftime("%H:%M:%S"), "stage": "error", "pct": 100, "msg": f"分析失败: {exc}"})
             st["error"] = str(exc)
-            _json.dumps({"error": str(exc)})
+        finally:
+            _restore_env(prev_env)
+            _cleanup_old_uploads(keep=work_dir)
 
     thread = threading.Thread(target=run, daemon=True)
     thread.start()
@@ -260,10 +318,7 @@ async def analyze_wait(
     if backend not in ("auto", "openai", "qwen", "heuristic"):
         raise HTTPException(status_code=400, detail="backend 只能是 auto / openai / qwen / heuristic")
 
-    if openai_key:
-        os.environ["OPENAI_API_KEY"] = openai_key
-    if qwen_key:
-        os.environ["DASHSCOPE_API_KEY"] = qwen_key
+    prev_env = _apply_env(openai_key, qwen_key)
 
     session_id = uuid.uuid4().hex
     work_dir = UPLOAD_DIR / session_id
@@ -278,28 +333,43 @@ async def analyze_wait(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"保存文件失败: {exc}") from exc
 
-    result = await asyncio.to_thread(
-        pipeline.analyze,
-        str(video_path),
-        work_dir=str(work_dir),
-        extract_keyframes=True,
-        detector=detector,
-        detect_transitions=True,
-        describe_shots=True,
-        vlm_backend=backend,
-        keep_workdir=True,
-        progress_cb=lambda stage, pct, msg: _progress_cb(session_id, stage, pct, msg),
-    )
+    st = _progress_state(session_id)
+    st.update({"stage": "uploaded", "pct": 1, "logs": [{"t": time.strftime("%H:%M:%S"), "stage": "upload", "pct": 1, "msg": f"文件已上传：{Path(file.filename or 'video').name}"}]})
+    try:
+        result = await asyncio.to_thread(
+            pipeline.analyze,
+            str(video_path),
+            work_dir=str(work_dir),
+            extract_keyframes=True,
+            detector=detector,
+            detect_transitions=True,
+            describe_shots=True,
+            vlm_backend=backend,
+            keep_workdir=True,
+            progress_cb=lambda stage, pct, msg: _progress_cb(session_id, stage, pct, msg),
+        )
+    except Exception as exc:
+        st["stage"] = "error"
+        st["error"] = str(exc)
+        st["logs"].append({"t": time.strftime("%H:%M:%S"), "stage": "error", "pct": 100, "msg": f"分析失败: {exc}"})
+        raise HTTPException(status_code=422, detail=f"分析失败: {exc}") from exc
+    finally:
+        _restore_env(prev_env)
+
     _last_session_id = session_id
     _last_dna = result
     result["_session_id"] = session_id
     result["_source_file"] = Path(file.filename or "video").name
+    st["result"] = result
+    st["stage"] = "done"
+    st["pct"] = 100
     try:
         (work_dir / "result.json").write_text(
             _json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     except Exception:
         pass
+    _cleanup_old_uploads(keep=work_dir)
 
     return result
 
@@ -309,8 +379,8 @@ def serve_frame(filename: str):
     """服务最近一次分析的关键帧图片。"""
     if _last_session_id is None:
         raise HTTPException(status_code=404, detail="尚无分析结果")
-    frame_path = UPLOAD_DIR / _last_session_id / "frames" / filename
-    if not frame_path.exists():
+    frame_path = _safe_join(UPLOAD_DIR / _last_session_id / "frames", filename)
+    if not frame_path.exists() or not frame_path.is_file():
         raise HTTPException(status_code=404, detail=f"关键帧未找到: {filename}")
     media_type = {
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -322,10 +392,10 @@ def serve_frame(filename: str):
 @app.get("/api/sessions/{session_id}/frames/{filename}")
 def serve_session_frame(session_id: str, filename: str):
     """服务任意 session 的关键帧（历史记录回看用）。"""
-    if not session_id.replace("-", "").isalnum() or ".." in filename:
+    if not session_id.replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="非法参数")
-    frame_path = UPLOAD_DIR / session_id / "frames" / filename
-    if not frame_path.exists():
+    frame_path = _safe_join(UPLOAD_DIR / session_id / "frames", filename)
+    if not frame_path.exists() or not frame_path.is_file():
         raise HTTPException(status_code=404, detail=f"关键帧未找到: {filename}")
     media_type = {
         ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
@@ -334,20 +404,67 @@ def serve_session_frame(session_id: str, filename: str):
     return FileResponse(str(frame_path), media_type=media_type)
 
 
+_VIDEO_MIME = {
+    ".mp4": "video/mp4", ".mov": "video/quicktime", ".mkv": "video/x-matroska",
+    ".webm": "video/webm", ".avi": "video/x-msvideo", ".m4v": "video/x-m4v",
+    ".ts": "video/mp2t", ".flv": "video/x-flv", ".wmv": "video/x-ms-wmv",
+}
+
+
+def _video_chunk(path: Path, start: int, length: int, chunk_size: int = 1 << 16):
+    with path.open("rb") as fh:
+        fh.seek(start)
+        remaining = length
+        while remaining > 0:
+            data = fh.read(min(chunk_size, remaining))
+            if not data:
+                break
+            remaining -= len(data)
+            yield data
+
+
 @app.get("/api/sessions/{session_id}/video")
-def serve_session_video(session_id: str):
-    """服务任意 session 的源视频（历史回看 / 剪映草稿下载）。"""
+def serve_session_video(session_id: str, request: Request):
+    """服务任意 session 的源视频（历史回看 / 剪映草稿下载），支持 Range 请求。"""
     if not session_id.replace("-", "").isalnum():
         raise HTTPException(status_code=400, detail="非法参数")
     videos = list((UPLOAD_DIR / session_id).glob("source.*"))
     if not videos:
         raise HTTPException(status_code=404, detail="源视频未找到")
-    return FileResponse(str(videos[0]), media_type="video/mp4")
+    vp = videos[0]
+    media_type = _VIDEO_MIME.get(vp.suffix.lower(), "application/octet-stream")
+    size = vp.stat().st_size
+    rng = request.headers.get("range")
+    if rng and rng.lower().startswith("bytes="):
+        try:
+            start_s, end_s = rng[6:].split("-", 1)
+            start = int(start_s) if start_s.strip() else 0
+            end = int(end_s) if end_s.strip() else size - 1
+            if end >= size:
+                end = size - 1
+            if start < 0 or start > end or start >= size:
+                return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+            length = end - start + 1
+            return StreamingResponse(
+                _video_chunk(vp, start, length),
+                status_code=206,
+                media_type=media_type,
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{size}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(length),
+                },
+            )
+        except (ValueError, IndexError):
+            pass
+    return FileResponse(str(vp), media_type=media_type, headers={"Accept-Ranges": "bytes"})
 
 
 @app.get("/api/result/{session_id}")
 def get_result(session_id: str):
     """返回某次分析的结果 JSON（前端轮询进度完成后获取）。"""
+    if not session_id.replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="非法参数")
     st = _progress_state(session_id)
     if st.get("stage") == "error":
         raise HTTPException(status_code=422, detail=st.get("error") or "分析失败")
@@ -369,18 +486,21 @@ def list_history():
     items = []
     if UPLOAD_DIR.exists():
         for d in sorted(UPLOAD_DIR.iterdir(), key=lambda p: p.stat().st_mtime if p.is_dir() else 0, reverse=True):
+            if not d.is_dir():
+                continue
             rp = d / "result.json"
             if not rp.exists():
                 continue
             try:
                 result = _json.loads(rp.read_text(encoding="utf-8"))
+                mtime = d.stat().st_mtime
             except Exception:
                 continue
             m = result.get("meta", {})
             items.append({
                 "session_id": d.name,
                 "name": result.get("_source_file") or m.get("source_file") or f"分析 {d.name[:8]}",
-                "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(d.stat().st_mtime)),
+                "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(mtime)),
                 "total_shots": m.get("total_shots", 0),
                 "duration": m.get("duration", 0),
                 "bpm": result.get("audio", {}).get("tempo_bpm"),
@@ -486,7 +606,12 @@ async def export_dna(dna: dict, fmt: str = "cutmark"):
                 shutil.copyfile(tmp.name, dest)
                 os.unlink(tmp.name)
                 return {"path": str(dest), "fmt": "all"}
-            return FileResponse(tmp.name, media_type="application/zip", filename="dna_export.zip")
+            return FileResponse(
+                tmp.name,
+                media_type="application/zip",
+                filename="dna_export.zip",
+                background=BackgroundTask(os.unlink, tmp.name),
+            )
         except Exception:
             os.unlink(tmp.name)
             raise
@@ -506,7 +631,12 @@ async def export_dna(dna: dict, fmt: str = "cutmark"):
             "cutmark": "application/json",
             "srt": "text/plain",
         }[fmt]
-        return FileResponse(tmp.name, media_type=media_type, filename=f"dna.{fmt}")
+        return FileResponse(
+            tmp.name,
+            media_type=media_type,
+            filename=f"dna.{fmt}",
+            background=BackgroundTask(os.unlink, tmp.name),
+        )
     except Exception:
         os.unlink(tmp.name)
         raise
@@ -636,8 +766,10 @@ async def export_draft(body: dict):
             out_dir=download_dir,
         )
         return {"path": folder, "download_dir": str(download_dir)}
-    except Exception:
+    except HTTPException:
         raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"剪映草稿生成失败: {exc}") from exc
 
 
 # ── AI 创作（任务8：AI 视频生成平台通用功能） ─────────────

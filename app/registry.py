@@ -415,15 +415,27 @@ def render_skill_prompt(skill: dict, dna: dict) -> str:
         transcript = "，".join(
             s.get("transcript") for s in shots if s.get("transcript")
         )[:4000]
-    return skill["prompt"].format(
-        meta=_compact_meta(meta),
-        summary=dna.get("summary") or "无",
-        shots=_compact_shots(shots),
-        transcript=(transcript or "无")[:4000],
-        audio=_compact_audio(audio),
-        bpm=audio.get("tempo_bpm") or "-",
-        duration=meta.get("duration") or "-",
-    )
+    try:
+        return skill["prompt"].format(
+            meta=_compact_meta(meta),
+            summary=dna.get("summary") or "无",
+            shots=_compact_shots(shots),
+            transcript=(transcript or "无")[:4000],
+            audio=_compact_audio(audio),
+            bpm=audio.get("tempo_bpm") or "-",
+            duration=meta.get("duration") or "-",
+        )
+    except (KeyError, ValueError):
+        # 用户技能 prompt 中可能含 {…} 花括号（如 JSON 示例），转义后原样保留
+        return skill["prompt"].replace("{", "{{").replace("}", "}}").format(
+            meta=_compact_meta(meta),
+            summary=dna.get("summary") or "无",
+            shots=_compact_shots(shots),
+            transcript=(transcript or "无")[:4000],
+            audio=_compact_audio(audio),
+            bpm=audio.get("tempo_bpm") or "-",
+            duration=meta.get("duration") or "-",
+        )
 
 
 def run_skill(skill: dict, dna: dict, model_cfg: dict | None = None) -> str:
@@ -565,6 +577,11 @@ def install_plugin_zip(zip_path: str | Path) -> dict:
     tmp.mkdir(parents=True, exist_ok=True)
     try:
         with zipfile.ZipFile(zip_path) as zf:
+            # 防 zip-slip：拒绝任何含 .. 或绝对路径的条目
+            for info in zf.infolist():
+                name = info.filename.replace("\\", "/")
+                if name.startswith("/") or ".." in name.split("/"):
+                    raise ValueError(f"压缩包包含非法路径条目: {info.filename}")
             zf.extractall(tmp)
         target = None
         for cand in (tmp, *[d for d in tmp.iterdir() if d.is_dir()]):

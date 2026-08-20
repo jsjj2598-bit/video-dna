@@ -196,7 +196,7 @@ input[type=file]{display:none;}
 .fs-preview{position:fixed;z-index:60;width:240px;border-radius:10px;overflow:hidden;background:var(--panel);border:1px solid var(--border-2);box-shadow:0 12px 40px rgba(0,0,0,.65);pointer-events:none;opacity:0;transition:opacity .12s;}
 .fs-preview img{width:100%;aspect-ratio:16/9;object-fit:cover;display:block;background:#05060a;}
 .fs-preview .pv-body{padding:8px 10px;font-size:11px;color:var(--fg-2);line-height:1.5;}
-.fs-preview .pv-title{font-weight:700;color:var(--fg-1);}
+.fs-preview .pv-title{font-weight:700;color:var(--fg);}
 .tml-legend{display:flex;gap:14px;font-size:11px;color:var(--fg-2);margin-top:10px;flex-wrap:wrap;}
 .tml-legend span{display:flex;align-items:center;gap:5px;}
 .tml-legend .sw{width:10px;height:10px;border-radius:3px;display:inline-block;}
@@ -854,7 +854,7 @@ function toast(msg, type='info', dur=3500) {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = 'toast ' + type;
-  t.innerHTML = msg;
+  t.textContent = msg;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity='0'; t.style.transform='translateX(30px)'; t.style.transition='all .25s'; setTimeout(() => t.remove(), 250); }, dur);
 }
@@ -896,6 +896,7 @@ function applyTheme() {
   document.documentElement.style.setProperty('--accent-2', accent);
   // 主色变体（浅化用于渐变尾端）
   const lighten = (hex, f) => {
+    if (typeof hex !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(hex)) return '#6d5df6';
     const n = parseInt(hex.slice(1), 16);
     const r = Math.min(255, Math.round(((n >> 16) & 255) + (255 - ((n >> 16) & 255)) * f));
     const g = Math.min(255, Math.round(((n >> 8) & 255) + (255 - ((n >> 8) & 255)) * f));
@@ -925,6 +926,34 @@ document.addEventListener('DOMContentLoaded', () => {
       applyTheme();
     });
   });
+
+  // 原生菜单「打开视频…」（文件选择后经 IPC 读取内容构建 File 上传）
+  if (window.electronAPI && window.electronAPI.onFileOpened) {
+    window.electronAPI.onFileOpened(async (filePath) => {
+      try {
+        if (!filePath) return;
+        const r = await window.electronAPI.readFile(filePath);
+        if (!r) { toast('❌ 无法读取文件', 'error'); return; }
+        if (r.error) { toast('❌ ' + r.error, 'error'); return; }
+        const bin = atob(r.data);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const f = new File([bytes], r.name, { type: 'video/' + (r.ext === 'mov' ? 'quicktime' : r.ext === 'mkv' ? 'x-matroska' : r.ext || 'mp4') });
+        if (window.switchTab) switchTab('analyze', document.querySelector('.nav-item'));
+        uploadFile(f);
+      } catch (e) {
+        toast('❌ 打开文件失败: ' + e.message, 'error');
+      }
+    });
+  }
+
+  // 原生菜单「导出 EDL/FCP7 XML/Cutmark」
+  if (window.electronAPI && window.electronAPI.onExport) {
+    window.electronAPI.onExport((fmt) => {
+      if (!currentResult) { toast('⚠️ 请先分析视频再导出', 'info'); return; }
+      if (typeof dlExp === 'function') dlExp(fmt);
+    });
+  }
 });
 
 // ── History ──
@@ -942,8 +971,18 @@ async function renderHistory() {
     const res = await fetch('/api/history');
     if (res.ok) serverItems = (await res.json()).items || [];
   } catch (_) {}
-  const h = getHistory();
+  let h = getHistory();
   if (!h.length && !serverItems.length) { el.innerHTML = '<div class="history-empty">暂无历史记录，去分析一支视频吧 🎬</div>'; return; }
+  // 去重：本地记录若已被服务端记录（同名 + 同一分钟内），不再重复展示
+  const serverKeys = new Set(serverItems.map(i => {
+    const t = new Date(String(i.time).replace(' ', 'T'));
+    return i.name + '|' + (isNaN(t.getTime()) ? i.time : Math.floor(t.getTime() / 60000));
+  }));
+  h = h.filter(i => {
+    const t = new Date(i.time);
+    const key = i.name + '|' + (isNaN(t.getTime()) ? i.time : Math.floor(t.getTime() / 60000));
+    return !serverKeys.has(key);
+  });
   const rows = [];
   serverItems.forEach(i => {
     rows.push(`
@@ -1026,6 +1065,11 @@ async function uploadFile(f) {
   // 生成会话 ID 用于轮询思考过程
   currentSessionId = 'sid-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 
+  const thinkBox = document.getElementById('thinkLogs');
+  if (thinkBox) { thinkBox.innerHTML = ''; thinkBox.style.display = 'none'; }
+  const analyzeBtn = document.getElementById('analyzeBtn');
+  if (analyzeBtn) analyzeBtn.disabled = true;
+
   showP('正在上传...', f.name);
   updateP(10);
   addThink('upload', 5, '上传视频：' + f.name);
@@ -1055,6 +1099,8 @@ async function uploadFile(f) {
   } catch (err) {
     hideP();
     toast('❌ ' + err.message, 'error');
+  } finally {
+    if (analyzeBtn) analyzeBtn.disabled = false;
   }
 }
 
@@ -1085,10 +1131,15 @@ function setCurrentThink(stage, msg) {
 async function waitAnalysis() {
   return new Promise((resolve, reject) => {
     let lastPct = -1;
+    let failStreak = 0;
+    let elapsed = 0;
     const poll = async () => {
+      elapsed += 800;
+      if (elapsed > 45 * 60 * 1000) { reject(new Error('分析超时（45 分钟），请重试')); return; }
       try {
         const res = await fetch('/api/progress/' + currentSessionId);
-        if (!res.ok) { setTimeout(poll, 800); return; }
+        if (!res.ok) { if (++failStreak > 5) { reject(new Error('进度服务不可用，请刷新页面重试')); return; } setTimeout(poll, 800); return; }
+        failStreak = 0;
         const p = await res.json();
         const pct = p.pct || 0;
         if (pct !== lastPct || p.stage === 'done' || p.stage === 'error') {
@@ -1097,7 +1148,7 @@ async function waitAnalysis() {
           if (p.logs && p.logs.length) {
             const box = document.getElementById('thinkLogs');
             if (box) {
-              // 增量渲染日志
+              // 按日志行数对齐渲染（每次分析前 thinkLogs 已清空）
               const existing = box.querySelectorAll('.think-log').length;
               const fresh = p.logs.slice(existing);
               fresh.forEach(l => {
@@ -1116,7 +1167,7 @@ async function waitAnalysis() {
           return;
         }
         setTimeout(poll, 800);
-      } catch (e) { setTimeout(poll, 800); }
+      } catch (e) { if (++failStreak > 5) { reject(new Error('进度服务不可用，请刷新页面重试')); return; } setTimeout(poll, 800); }
     };
     poll();
   });
@@ -1245,8 +1296,12 @@ function showDraftHelp(folderPath) {
     const div = document.createElement('div');
     div.id = 'draftHelpModal';
     div.className = 'modal-overlay active';
-    div.innerHTML = '<div class="modal"><div class="modal-head"><h3>📦 剪映草稿已生成</h3><button class="modal-x" onclick="this.closest(\'.modal-overlay\').remove()">×</button></div><div class="modal-body"><pre id="draftHelpText" style="white-space:pre-wrap;line-height:1.9;color:var(--fg-2);font-size:13px;margin:0"></pre></div><div class="modal-foot"><button class="btn" onclick="openDraftFolder(\'' + (folderPath || '') + '\')">📁 打开文件夹</button><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">知道了</button></div></div>';
+    div.innerHTML = '<div class="modal"><div class="modal-head"><h3>📦 剪映草稿已生成</h3><button class="modal-x" onclick="this.closest(\'.modal-overlay\').remove()">×</button></div><div class="modal-body"><pre id="draftHelpText" style="white-space:pre-wrap;line-height:1.9;color:var(--fg-2);font-size:13px;margin:0"></pre></div><div class="modal-foot"><button class="btn" data-folder="' + encodeURIComponent(folderPath || '') + '" id="draftOpenBtn">📁 打开文件夹</button><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">知道了</button></div></div>';
     document.body.appendChild(div);
+    const openBtn = div.querySelector('#draftOpenBtn');
+    if (openBtn) openBtn.addEventListener('click', () => {
+      try { openDraftFolder(decodeURIComponent(openBtn.dataset.folder)); } catch (_) { toast('⚠️ 请手动打开目录', 'info'); }
+    });
     return div;
   })();
   modal.classList.add('active');
@@ -1272,7 +1327,7 @@ function renderResult(d, file, opts) {
   const sr = a.speech_regions || [];
   const palette = ['#6d5df6','#4f7dff','#38bdf8','#34d399','#fbbf24','#f472b6','#22d3ee','#a78bfa'];
   const total = m.duration || 1;
-  const frameBase = d._frame_base || '/api/frames/';
+  const frameBase = d._frame_base || (d._session_id ? '/api/sessions/' + d._session_id + '/frames/' : '/api/frames/');
 
   const sceneTypes = {}; let faceTotal=0, emotions={}, described=0;
   shots.forEach(s => {
@@ -1300,7 +1355,7 @@ function renderResult(d, file, opts) {
   }
 
   document.getElementById('resultArea').innerHTML = `
-    ${videoUrl ? `<div class="video-mini video-card"><video id="videoEl" src="${videoUrl}" controls preload="metadata" poster="${frameBase}${shots[0]?.keyframe||''}"></video><div class="vm-bar"><span class="vm-title">🎬 ${esc(d._source_file || '视频')}</span><span>${m.duration ? m.duration.toFixed(1)+'s' : ''} · ${m.resolution||''}</span></div></div>` : ''}
+    ${videoUrl ? `<div class="video-mini video-card"><video id="videoEl" src="${encodeURI(videoUrl)}" controls preload="metadata" poster="${frameBase}${encodeURIComponent(shots[0]?.keyframe||'')}"></video><div class="vm-bar"><span class="vm-title">🎬 ${esc(d._source_file || '视频')}</span><span>${m.duration ? m.duration.toFixed(1)+'s' : ''} · ${esc(m.resolution||'')}</span></div></div>` : ''}
 
     <div class="stats-row">
       <div class="stat-tile"><div class="num">${m.total_shots||0}</div><div class="lbl">🎬 镜头总数</div></div>
@@ -1368,7 +1423,7 @@ function renderResult(d, file, opts) {
 
     <div class="json-card">
       <div class="section-header"><h3>📄 剪辑 DNA <small>完整 JSON</small></h3><button class="btn btn-sm" onclick="copyJson()">📋 复制</button></div>
-      <pre id="jsonPre">${JSON.stringify(d,null,2)}</pre>
+      <pre id="jsonPre">${esc(JSON.stringify(d,null,2))}</pre>
     </div>
   `;
 
@@ -1391,7 +1446,7 @@ function renderResult(d, file, opts) {
     el.style.left = (s.start * PX) + 'px';
     el.style.width = Math.max(s.duration * PX - 2, 10) + 'px';
     const img = document.createElement('img');
-    img.src = frameBase + (s.keyframe || '');
+    img.src = frameBase + encodeURIComponent(s.keyframe || '');
     img.onerror = () => img.style.display = 'none';
     const lbl = document.createElement('span');
     lbl.className = 'fs-label';
@@ -1409,7 +1464,7 @@ function renderResult(d, file, opts) {
   sr.forEach(r => { const el = document.createElement('div'); el.className = 'fs-speech'; el.style.left = (r.start * PX) + 'px'; el.style.width = Math.max((r.end - r.start) * PX - 1, 6) + 'px'; el.title = (r.text || '语音') + ' [' + r.start.toFixed(1) + 's→' + r.end.toFixed(1) + 's]'; fs.appendChild(el); });
 
   function showPreview(s, e, el) {
-    pvImg.src = frameBase + (s.keyframe || '');
+    pvImg.src = frameBase + encodeURIComponent(s.keyframe || '');
     pvTitle.textContent = '镜头 ' + (el ? el.dataset.idx : '') + ' · ' + s.start.toFixed(1) + 's→' + s.end.toFixed(1) + 's · ' + s.duration.toFixed(1) + 's' + (s.transition ? ' · ' + s.transition : '');
     pvDesc.textContent = (s.content || '') + (s.transcript ? ' 🎤' + s.transcript : '');
     const fsRect = fs.getBoundingClientRect();
@@ -1434,20 +1489,20 @@ function renderResult(d, file, opts) {
   shots.forEach((s, i) => {
     const card = document.createElement('div');
     card.className = 'shot-card';
-    let tags = '<span class="tag">' + (s.transition || '硬切') + '</span>';
+    let tags = '<span class="tag">' + esc(s.transition || '硬切') + '</span>';
     if (s.beat_aligned) tags += '<span class="tag tag-green">🎯 卡点</span>';
-    if (s.scene_type) tags += '<span class="tag tag-blue">' + (sceneLabels[s.scene_type] || s.scene_type) + '</span>';
-    if (s.face_count > 0) tags += '<span class="tag tag-orange">👤 ×' + s.face_count + '</span>';
+    if (s.scene_type) tags += '<span class="tag tag-blue">' + esc(sceneLabels[s.scene_type] || s.scene_type) + '</span>';
+    if (s.face_count > 0) tags += '<span class="tag tag-orange">👤 ×' + esc(s.face_count) + '</span>';
     if (s.emotion) tags += '<span class="tag tag-pink">' + esc(s.emotion) + '</span>';
-    if (s.color_tone) tags += '<span class="tag">🎨 ' + s.color_tone + '</span>';
+    if (s.color_tone) tags += '<span class="tag">🎨 ' + esc(s.color_tone) + '</span>';
     card.title = '点击跳转到该镜头 (' + s.start.toFixed(1) + 's)';
     card.innerHTML = `
-      <img src="${frameBase}${s.keyframe || ''}" alt="" loading="lazy" onerror="this.style.display='none'">
+      <img src="${frameBase}${encodeURIComponent(s.keyframe || '')}" alt="" loading="lazy" onerror="this.style.display='none'">
       <div class="shot-body">
         <div><span class="sn">镜头 ${i}</span><span class="sd">${s.duration.toFixed(1)}s</span></div>
         <div class="shot-tags">${tags}</div>
         ${s.transcript ? '<div class="transcript">🎤 ' + esc(s.transcript) + '</div>' : ''}
-        ${s.content ? '<div class="desc">' + esc(s.content) + (s.shot_scale ? ' [' + s.shot_scale + ']' : '') + (s.camera_motion ? ' · ' + s.camera_motion : '') + '</div>' : ''}
+        ${s.content ? '<div class="desc">' + esc(s.content) + (s.shot_scale ? ' [' + esc(s.shot_scale) + ']' : '') + (s.camera_motion ? ' · ' + esc(s.camera_motion) : '') + '</div>' : ''}
       </div>`;
     sg.appendChild(card);
   });

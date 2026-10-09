@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; style-src 'self'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'">
+<title>Video DNA Analyzer</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="logo"><img src="/static/assets/brand-avatar.png" alt="Video DNA 品牌头像"></div>
+    <div class="name">Video DNA<small>ANALYZER STUDIO</small></div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section">工作台</div>
+    <div class="nav-item active" onclick="switchTab('analyze',this)">
+      <span class="icon-tile icon-glyph">◈</span> 视频分析
+    </div>
+    <div class="nav-item" onclick="switchTab('components',this)">
+      <span class="icon-tile icon-glyph">⌘</span> AI 组件
+    </div>
+    <div class="nav-item" onclick="switchTab('history',this)">
+      <span class="icon-tile icon-glyph">≡</span> 历史记录
+    </div>
+    <div class="nav-item" onclick="switchTab('tasks',this)">
+      <span class="icon-tile icon-glyph">◷</span> 任务中心
+    </div>
+    <div class="nav-item" onclick="switchTab('studio',this)">
+      <span class="icon-tile icon-glyph">✦</span> AI 创作
+    </div>
+    <div class="nav-section">系统</div>
+    <div class="nav-item" onclick="switchTab('settings',this)">
+      <span class="icon-tile icon-glyph">⚙</span> 设置
+    </div>
+    <div class="nav-item" onclick="switchTab('about',this)">
+      <span class="icon-tile icon-glyph">ⓘ</span> 关于
+    </div>
+  </div>
+  <div class="sidebar-footer">
+    <div class="project-mini" id="projectMini" onclick="openProjectSettings()" title="当前项目">
+      <span class="project-mini-icon">◇</span><span><b id="projectMiniName">未命名项目</b><small id="projectMiniMeta">创建项目开始工作</small></span>
+    </div>
+    <div class="status"><span class="dot"></span><span id="backendStatus">后端运行中</span></div>
+    <div class="version">v0.4.0 · Go 组件版</div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="header">
+    <div class="header-left">
+      <h2 id="pageTitle">视频分析</h2>
+      <span class="breadcrumb" id="breadcrumb">上传视频并提取剪辑 DNA</span>
+    </div>
+    <div class="header-actions">
+      <button class="btn" onclick="uploadVideo()">📤 上传视频</button>
+      <button class="btn btn-primary" onclick="startAnalysis()" id="analyzeBtn" disabled>▶ 开始分析</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="content-inner">
+
+      <!-- ═══ Analyze ═══ -->
+      <div class="tab-panel active" id="tab-analyze">
+        <div class="workspace-bar">
+          <div class="workspace-project"><span class="project-mark">◇</span><div><strong id="projectName">未命名项目</strong><span id="projectMeta">还没有素材</span></div></div>
+          <div class="workspace-actions"><button type="button" class="btn btn-sm" onclick="renameProject()">重命名</button><button type="button" class="btn btn-sm" onclick="createProject()">新建项目</button></div>
+        </div>
+        <div class="asset-strip" id="assetStrip"><div class="asset-empty">项目素材会显示在这里。支持拖入多个视频，先选择一个开始分析。</div></div>
+        <div class="drop-zone" id="dropZone">
+          <img class="brand-inline-icon" src="/static/assets/brand-avatar.png" alt="">
+          <p>拖拽视频到此处，或点击「上传视频」</p>
+          <small>支持 mp4 / mov / mkv / webm / avi · 最大 2GB</small>
+        </div>
+        <input type="file" id="fileInput" accept="video/*" multiple>
+        <input type="file" id="templateInput" accept="video/*" style="display:none">
+        <div id="resultArea"></div>
+      </div>
+
+      <!-- ═══ Components ═══ -->
+      <div class="tab-panel" id="tab-components">
+        <div class="comp-hero">
+          <span class="icon">🧩</span>
+          <div>
+            <h3>AI 组件中心</h3>
+            <p>管理内置分析组件、接入你的 AI 模型、安装插件、运行技能。模型可接入 OpenAI / 通义千问 / Ollama / 任意 OpenAI 兼容端点。</p>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h3>⚙️ 基础组件 <small>分析管线中的能力开关</small></h3>
+        </div>
+        <div class="comp-grid" id="compGrid"></div>
+
+        <div class="section-header" style="margin-top:22px">
+          <h3>🤖 AI 模型 <small>用于语义描述 / 技能 / 翻译 / 摘要</small></h3>
+          <button class="btn btn-primary btn-sm" onclick="openModelModal()">＋ 添加模型</button>
+        </div>
+        <div class="card" style="padding:6px 16px" id="modelList"></div>
+
+        <div class="section-header" style="margin-top:22px">
+          <h3>🔌 插件 <small>跨平台可执行插件，JSON stdin/stdout 协议</small></h3>
+          <button class="btn btn-sm" onclick="document.getElementById('pluginInput').click()">📦 安装插件包 (ZIP)</button>
+          <input type="file" id="pluginInput" accept=".zip" style="display:none">
+        </div>
+        <div class="card" style="padding:6px 16px" id="pluginList"></div>
+
+        <div class="section-header" style="margin-top:22px">
+          <h3>✨ AI 技能 <small>对分析结果一键运行</small></h3>
+          <button class="btn btn-primary btn-sm" onclick="openSkillModal()">＋ 自定义技能</button>
+        </div>
+        <div class="comp-grid" id="skillList"></div>
+      </div>
+
+      <!-- ═══ History ═══ -->
+      <div class="tab-panel" id="tab-history">
+        <div class="section-header">
+          <h3>📋 分析历史 <small>完整结果可回看</small></h3>
+          <button class="btn btn-sm btn-danger" onclick="clearHistory()">清空</button>
+        </div>
+        <div id="historyList"></div>
+      </div>
+
+      <!-- ═══ Tasks ═══ -->
+      <div class="tab-panel" id="tab-tasks">
+        <div class="section-header">
+          <h3>⏱ 任务中心 <small>后台分析进度、失败原因与取消操作</small></h3>
+          <button class="btn btn-sm" type="button" onclick="loadTasks()">刷新</button>
+        </div>
+        <div class="task-center-note">分析在后台运行时可以继续浏览项目。任务状态由本机分析引擎保存，完成后可直接打开结果。</div>
+        <div id="taskList" class="task-list"><div class="empty-state">正在读取任务...</div></div>
+      </div>
+
+      <!-- ═══ AI 创作 ═══ -->
+      <div class="tab-panel" id="tab-studio">
+        <div class="comp-hero">
+          <span class="icon">✨</span>
+          <div>
+            <h3>AI 创作中心</h3>
+            <p>AI 视频平台的通用创作能力：节奏模板一键套用、AI 分镜脚本、BGM 风格推荐。选好模板后上传自己的视频即可生成剪映草稿。</p>
+          </div>
+        </div>
+
+        <div class="section-header">
+          <h3>🎛️ 节奏模板库 <small>AI 视频平台模板中心能力</small></h3>
+        </div>
+        <div class="studio-grid" id="studioTpls"></div>
+
+        <div class="section-header" style="margin-top:8px">
+          <h3>📝 AI 分镜脚本</h3>
+          <button class="btn btn-primary btn-sm" onclick="genStoryboard()">✨ 生成分镜脚本</button>
+        </div>
+        <div class="studio-card">
+          <div class="studio-row">
+            <div class="field">
+              <label>主题 / 文案</label>
+              <textarea id="sbTopic" style="min-height:70px" placeholder="例如：夏日海边旅行 Vlog，记录冲浪和日落"></textarea>
+            </div>
+            <div class="field" style="max-width:140px">
+              <label>镜头数</label>
+              <input type="number" id="sbCount" value="6" min="3" max="20">
+            </div>
+          </div>
+          <div id="sbResult" style="font-size:12px;color:var(--fg-3)">输入主题后点击「生成分镜脚本」，AI 将输出分镜表格（未配置对话模型时使用内置框架）。</div>
+        </div>
+
+        <div class="section-header" style="margin-top:8px">
+          <h3>🎵 BGM 风格推荐</h3>
+          <button class="btn btn-primary btn-sm" onclick="recommendBgm()">💡 按分析结果推荐</button>
+        </div>
+        <div class="studio-card">
+          <div id="bgmResult" style="font-size:12px;color:var(--fg-3)">先分析一个视频，再点击「按分析结果推荐」获取匹配的 BGM 风格与搜索关键词。</div>
+        </div>
+      </div>
+
+      <!-- ═══ Settings ═══ -->
+      <div class="tab-panel" id="tab-settings">
+        <div class="section-header"><h3>⚙️ 设置</h3></div>
+        <div class="card card-pad">
+          <div class="settings-group">
+            <h3>分析引擎</h3>
+            <div class="setting-row">
+              <label>检测器 <span class="hint">镜头切换检测算法</span></label>
+              <select id="setDetector">
+                <option value="content">基于内容（推荐）</option>
+                <option value="adaptive">自适应</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-group">
+            <h3>语义描述（快速配置）</h3>
+            <div class="setting-row">
+              <label>后端 <span class="hint">无 API Key 时自动使用启发式；建议在「AI 组件」中配置模型</span></label>
+              <select id="setBackend">
+                <option value="auto">自动</option>
+                <option value="openai">OpenAI GPT-4o</option>
+                <option value="qwen">通义千问 Qwen-VL</option>
+                <option value="heuristic">启发式（无需 API）</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label>OpenAI API Key</label>
+              <input type="password" id="setOpenAIKey" placeholder="sk-..." autocomplete="off">
+            </div>
+            <div class="setting-row">
+              <label>通义千问 API Key</label>
+              <input type="password" id="setQwenKey" placeholder="sk-..." autocomplete="off">
+            </div>
+          </div>
+          <div class="settings-group">
+            <h3>导出</h3>
+            <div class="setting-row">
+              <label>默认导出格式</label>
+              <select id="setExportFmt">
+                <option value="cutmark">Cutmark JSON</option>
+                <option value="edl">EDL (CMX3600)</option>
+                <option value="fcp7xml">FCP7 XML</option>
+                <option value="srt">SRT 字幕</option>
+                <option value="all">全部 (ZIP)</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label>文件下载目录 <span class="hint">剪映草稿、导出文件保存的位置</span></label>
+              <div style="display:flex;gap:6px;align-items:center">
+                <input type="text" id="setDownloadDir" placeholder="如 D:\VideoDNA 输出" style="width:260px">
+                <button class="btn btn-sm" onclick="pickDownloadDir()">📁 浏览</button>
+              </div>
+            </div>
+          </div>
+          <div class="settings-group">
+            <h3>外观主题</h3>
+            <div class="setting-row">
+              <label>主题模式 <span class="hint">深色 / 浅色 / OLED 纯黑</span></label>
+              <select id="setTheme" onchange="applyTheme()">
+                <option value="dark">深色（默认）</option>
+                <option value="light">浅色</option>
+                <option value="oled">OLED 纯黑</option>
+              </select>
+            </div>
+            <div class="setting-row">
+              <label>强调色 <span class="hint">界面主色调</span></label>
+              <div class="theme-dots" id="themeDots">
+                <div class="theme-dot active" data-c="#6d5df6" style="background:#6d5df6" title="紫罗兰"></div>
+                <div class="theme-dot" data-c="#0ea5e9" style="background:#0ea5e9" title="天空蓝"></div>
+                <div class="theme-dot" data-c="#10b981" style="background:#10b981" title="翡翠绿"></div>
+                <div class="theme-dot" data-c="#f43f5e" style="background:#f43f5e" title="玫瑰红"></div>
+                <div class="theme-dot" data-c="#f59e0b" style="background:#f59e0b" title="琥珀橙"></div>
+                <div class="theme-dot" data-c="#ec4899" style="background:#ec4899" title="品红"></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+            <button class="btn btn-primary" onclick="saveSettings()">保存设置</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ About ═══ -->
+      <div class="tab-panel" id="tab-about">
+        <div class="card" style="padding:36px;text-align:center">
+          <img class="about-brand-avatar" src="/static/assets/brand-avatar.png" alt="Video DNA 品牌头像">
+          <h2 style="font-size:22px;font-weight:750;margin-bottom:4px;letter-spacing:-.3px">Video DNA Analyzer</h2>
+          <p style="color:var(--fg-2);font-size:14px;margin-bottom:24px">视频剪辑结构逆向分析引擎 v0.4.0 · Go / go-zero 组件版</p>
+          <div style="text-align:left;max-width:440px;margin:0 auto;font-size:13px;line-height:2;color:var(--fg-2)">
+            <p>🔬 基于 AI 的镜头结构分析：镜头切分 / 转场分类 / BPM 卡点 / HPSS 音效</p>
+            <p>🎙️ faster-whisper ASR 台词转写 + SRT 字幕导出</p>
+            <p>🧩 可扩展 AI 组件：接入你自己的模型 / 插件 / 技能</p>
+            <p>📦 EDL / FCP7 XML / Cutmark JSON 专业导出</p>
+            <br>
+            <p>📦 仓库：<a href="https://github.com/jsjj2598-bit/video-dna" style="color:var(--accent-3)" target="_blank">github.com/jsjj2598-bit/video-dna</a></p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Modals -->
+<div class="modal-overlay" id="modalModel">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="modelModalTitle">添加模型</h3>
+      <button class="modal-x" onclick="closeModal('modalModel')">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="mId">
+      <div class="field">
+        <label>模型名称 <span class="req">*</span></label>
+        <input id="mName" placeholder="例如：我的 GPT-4o">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>类型 <span class="req">*</span></label>
+          <select id="mKind">
+            <option value="vision">👁️ 视觉模型（图像理解）</option>
+            <option value="chat">💬 对话模型（技能/翻译/摘要）</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>服务商</label>
+          <select id="mProvider" onchange="providerChanged()">
+            <option value="openai">OpenAI</option>
+            <option value="dashscope">通义千问</option>
+            <option value="ollama">Ollama（本地）</option>
+            <option value="custom">自定义（OpenAI 兼容）</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>接口地址 (Base URL) <span class="req">*</span></label>
+        <input id="mBaseUrl" placeholder="https://api.openai.com/v1">
+        <div class="hint">使用 OpenAI 兼容的 /chat/completions 协议；Ollama 为 http://localhost:11434/v1</div>
+      </div>
+      <div class="field">
+        <label>模型 ID <span class="req">*</span></label>
+        <input id="mModel" placeholder="gpt-4o / qwen-vl-max / llama3">
+      </div>
+      <div class="field">
+        <label>API Key</label>
+        <input type="password" id="mApiKey" placeholder="sk-..." autocomplete="off">
+        <div class="hint">使用系统凭据库加密保存，不写入项目配置文件，也不会上传到第三方。</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="testModel()">🔌 测试连接</button>
+      <button class="btn btn-primary" onclick="saveModel()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalSkill">
+  <div class="modal">
+    <div class="modal-head">
+      <h3>自定义技能</h3>
+      <button class="modal-x" onclick="closeModal('modalSkill')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>技能名称 <span class="req">*</span></label>
+        <input id="skName" placeholder="例如：分镜脚本生成">
+      </div>
+      <div class="field">
+        <label>说明</label>
+        <input id="skDesc" placeholder="这个技能是做什么的">
+      </div>
+      <div class="field">
+        <label>提示词模板 <span class="req">*</span></label>
+        <textarea id="skPrompt" placeholder="可用占位符：{meta} {summary} {shots} {transcript} {audio} {bpm} {duration}"></textarea>
+        <div class="hint">占位符会在运行时替换为分析结果数据：{meta} 视频元信息 · {summary} 摘要 · {shots} 镜头列表 · {transcript} 完整台词 · {audio} 音频信息 · {bpm} BPM · {duration} 时长</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-primary" onclick="saveSkill()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOutput">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-head">
+      <h3 id="outputTitle">技能结果</h3>
+      <button class="modal-x" onclick="closeModal('modalOutput')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="skill-output" id="outputBody"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="copyOutput()">📋 复制</button>
+      <button class="btn btn-primary" onclick="closeModal('modalOutput')">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalProject">
+  <div class="modal modal-compact">
+    <div class="modal-head"><h3>项目设置</h3><button class="modal-x" onclick="closeModal('modalProject')">×</button></div>
+    <div class="modal-body"><div class="field"><label>项目名称</label><input id="projectNameInput" maxlength="80" placeholder="例如：夏日旅行短片"></div><div class="hint">项目状态会自动保存在本机。工程文件可用于备份和迁移。</div><div class="recent-projects-title">最近项目</div><div id="recentProjects" class="recent-projects"></div></div>
+    <div class="modal-foot"><button class="btn" onclick="importProject()">打开工程</button><button class="btn" onclick="exportProject()">保存工程</button><button class="btn" onclick="closeModal('modalProject')">取消</button><button class="btn btn-primary" onclick="saveProjectName()">保存</button></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalShot">
+  <div class="modal modal-compact">
+    <div class="modal-head"><h3>复核镜头</h3><button class="modal-x" onclick="closeModal('modalShot')">×</button></div>
+    <div class="modal-body"><input type="hidden" id="shotEditIndex"><div class="field-row"><div class="field"><label>开始时间（秒）</label><input id="shotEditStart" type="number" min="0" step="0.001"></div><div class="field"><label>结束时间（秒）</label><input id="shotEditEnd" type="number" min="0" step="0.001"></div></div><div class="field"><label>转场类型</label><select id="shotEditTransition"><option value="cut">Cut / 硬切</option><option value="dissolve">Dissolve / 溶解</option><option value="fade">Fade / 淡入淡出</option></select></div><div class="field"><label>复核备注</label><textarea id="shotEditNote" maxlength="500" placeholder="记录为什么修改，方便后续复核"></textarea></div></div>
+    <div class="modal-foot"><button class="btn btn-danger" onclick="removeEditingShot()">删除镜头</button><button class="btn btn-primary" onclick="saveEditingShot()">保存修改</button></div>
+  </div>
+</div>
+
+<!-- Toast / Progress -->
+<div class="toast-container" id="toastContainer"></div>
+<div class="error-panel" id="errorPanel" role="alert" aria-live="polite" hidden>
+  <div class="error-panel-head"><span class="error-panel-icon">!</span><div><strong id="errorPanelTitle">操作失败</strong><small id="errorPanelStage"></small></div><button class="modal-x" onclick="hideErrorPanel()" title="关闭">×</button></div>
+  <div class="error-panel-body"><p id="errorPanelMessage"></p><div class="error-panel-detail" id="errorPanelDetail"></div></div>
+  <div class="error-panel-foot"><button class="btn btn-sm" id="errorPanelRetry" hidden onclick="retryLastOperation()">重新运行</button><button class="btn btn-sm" onclick="hideErrorPanel()">知道了</button></div>
+</div>
+<div class="progress" id="progressOverlay">
+  <div class="progress-box">
+    <div class="progress-head">
+      <div class="spinner"></div>
+      <div style="flex:1;text-align:left">
+        <div class="p-status" id="pStatus">正在分析...</div>
+        <div class="p-sub" id="pSub">请稍候</div>
+      </div>
+      <button class="progress-min-btn" onclick="minimizeProgress()" title="最小化到右下角，可继续操作其他页面">后台 ⤓</button>
+      <button class="progress-min-btn" onclick="cancelCurrentAnalysis()" title="停止当前分析并清理临时文件">取消</button>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="pFill"></div></div>
+    <div class="think-logs" id="thinkLogs" style="margin-top:12px;text-align:left;max-height:180px;display:none"></div>
+  </div>
+</div>
+<div class="progress-min" id="progressMinBadge" onclick="restoreProgress()" title="点击查看分析进度" style="display:none">
+  <div class="spinner"></div>
+  <span class="pm-label">分析中</span>
+  <span class="pm-pct" id="pmPct">0%</span>
+</div>
+<script src="/static/js/core.js" defer></script>
+<script src="/static/js/history.js" defer></script>
+<script src="/static/js/analysis.js" defer></script>
+<script src="/static/js/tasks.js" defer></script>
+<script src="/static/js/project.js" defer></script>
+<script src="/static/js/components.js" defer></script>
+<script src="/static/js/studio.js" defer></script>
+</body>
+</html>

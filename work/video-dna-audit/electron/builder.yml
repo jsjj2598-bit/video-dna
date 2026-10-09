@@ -1,0 +1,60 @@
+appId: com.videodna.analyzer
+productName: "Video DNA Analyzer"
+copyright: Copyright © 2026 Video DNA contributors
+
+directories:
+  output: dist
+  buildResources: electron
+
+icon: icon.png
+
+files:
+  - "electron/**/*"
+  - "package.json"
+
+# Go 后端与 FFmpeg 工具链放到 resources；后端会自动从 resources/tools 发现工具。
+extraResources:
+  - from: dist
+    to: .
+    filter:
+      - backend
+      - backend.exe
+      - tools/**/*
+
+win:
+  target:
+    - nsis
+    - portable
+  publish: null
+  signAndEditExecutable: true
+  # Release CI supplies CSC_LINK/CSC_KEY_PASSWORD (and optionally CSC_NAME).
+  verifyUpdateCodeSignature: true
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  publish: null
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.inherit.plist
+  # Release CI supplies CSC_LINK/CSC_KEY_PASSWORD and APPLE_* notarization vars.
+  category: public.app-category.video
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  publish: null
+
+asar: true
+npmRebuild: false

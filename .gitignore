@@ -1,3 +1,50 @@
-﻿node_modules/
+﻿# Go
+/videodna
+*.test
+*.out
+coverage/
+
+# Node / Electron
+node_modules/
 dist/
+electron/dist/
+app.asar
+*.dmg
+*.pkg
+*.blockmap
+
+# Local application data and build output
+uploads/
+output*/
+build/
+debug_*/
+*.tmp
+*.temp
+
+# Generated media used by local experiments
+test_data/*.wav
+test_data/tseg_*.mp4
+test_data/ab.mp4
+test_data/bg.mp4
+
+# Secrets
+.env
+.github_token
+
+# Editors / operating systems
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Legacy local caches are ignored during migration checkouts
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Windows executables
 *.exe

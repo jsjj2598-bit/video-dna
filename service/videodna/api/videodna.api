@@ -1,0 +1,325 @@
+syntax = "v1"
+
+info (
+	title:   "Video DNA Analyzer"
+	desc:    "本地优先的视频剪辑结构分析桌面服务"
+	author:  "Video DNA contributors"
+	version: "0.4.0"
+)
+
+// ── 公共数据结构 ──────────────────────────────────────────────────────────────
+type (
+	// EmptyResp 空响应占位；文件流接口不会序列化该结构
+	EmptyResp  {}
+	// OkResp 通用成功响应
+	OkResp {
+		Ok bool `json:"ok"` // 操作是否成功
+	}
+	// CutItem 剪辑区间
+	CutItem {
+		Index         int64   `json:"index,optional"` // 区间序号，从 0 开始
+		Start         float64 `json:"start"` // 开始时间，单位秒
+		End           float64 `json:"end"` // 结束时间，单位秒
+		Duration      float64 `json:"duration,optional"` // 区间时长，单位秒
+		AlignedToBeat bool    `json:"aligned_to_beat,optional"` // 是否吸附到节拍
+	}
+	// AnalyzeAcceptedResp 异步分析提交结果
+	AnalyzeAcceptedResp {
+		SessionId string `json:"session_id"` // 分析会话 ID
+		Status    string `json:"status"` // 状态：running=运行中
+	}
+	// ProgressLog 单条分析进度日志
+	ProgressLog {
+		Time    string `json:"t"` // 日志时间，格式 HH:mm:ss
+		Stage   string `json:"stage"` // 分析阶段
+		Percent int64  `json:"pct"` // 阶段总进度，范围 0-100
+		Message string `json:"msg"` // 用户可读日志
+	}
+	// ProgressResp 分析任务进度
+	ProgressResp {
+		SessionId string        `json:"session_id"` // 分析会话 ID
+		Stage     string        `json:"stage"` // 当前阶段
+		Percent   int64         `json:"pct"` // 总进度，范围 0-100
+		Logs      []ProgressLog `json:"logs"` // 最近进度日志
+		Error     string        `json:"error,optional"` // 失败原因
+		Done      bool          `json:"done"` // 是否已结束
+	}
+	// HistoryItem 单条历史分析摘要
+	HistoryItem {
+		SessionId  string  `json:"session_id"` // 分析会话 ID
+		Name       string  `json:"name"` // 源视频文件名
+		Time       string  `json:"time"` // 分析完成时间
+		TotalShots int64   `json:"total_shots"` // 镜头数量
+		Duration   float64 `json:"duration"` // 视频时长，单位秒
+		Bpm        float64 `json:"bpm,optional"` // 估算 BPM
+		Summary    string  `json:"summary"` // 分析摘要
+		HasVideo   bool    `json:"has_video"` // 是否保留源视频
+		ShotCount  int64   `json:"shot_count"` // 镜头数量
+	}
+	// HistoryListResp 历史分析列表
+	HistoryListResp {
+		Items []HistoryItem `json:"items"` // 按更新时间倒序排列的历史记录
+	}
+	// RhythmTemplate 内置节奏模板
+	RhythmTemplate {
+		Id      string    `json:"id"` // 模板 ID
+		Name    string    `json:"name"` // 模板名称
+		Desc    string    `json:"desc"` // 模板说明
+		Icon    string    `json:"icon"` // 展示图标
+		Bpm     float64   `json:"bpm"` // 建议 BPM
+		Shot    float64   `json:"shot"` // 建议平均镜头时长
+		Pattern []float64 `json:"pattern"` // 镜头时长模式
+	}
+	// TemplateListResp 内置节奏模板列表
+	TemplateListResp {
+		Templates []RhythmTemplate `json:"templates"` // 可选模板列表
+	}
+)
+// ── 服务定义 ──────────────────────────────────────────────────────────────────
+@server (
+	group: system
+)
+service VideoDNA {
+	@doc "服务健康检查"
+	@handler Health
+	get /health returns (EmptyResp)
+}
+
+@server (
+	group:    analysis
+	prefix:   /api
+	timeout:  30m
+	maxBytes: 2147483648
+)
+service VideoDNA {
+	@doc "异步上传并分析视频"
+	@handler Analyze
+	post /analyze (AnalyzeReq) returns (AnalyzeAcceptedResp)
+
+	@doc "同步上传并等待视频分析完成"
+	@handler AnalyzeWait
+	post /analyze/wait (AnalyzeReq) returns (EmptyResp)
+
+	@doc "查询分析任务进度"
+	@handler Progress
+	get /progress/:session_id (SessionReq) returns (ProgressResp)
+
+	@doc "读取完整 Video DNA 分析结果"
+	@handler Result
+	get /result/:session_id (SessionReq) returns (EmptyResp)
+}
+
+@server (
+	group:  media
+	prefix: /api
+)
+service VideoDNA {
+	@doc "读取镜头关键帧"
+	@handler SessionFrame
+	get /sessions/:session_id/frames/:filename (SessionFrameReq)
+
+	@doc "读取支持 Range 的源视频"
+	@handler SessionVideo
+	get /sessions/:session_id/video (SessionReq)
+
+	@doc "获取分析历史列表"
+	@handler HistoryList
+	get /history returns (HistoryListResp)
+
+	@doc "获取单条历史分析详情"
+	@handler HistoryDetail
+	get /history/:session_id (SessionReq) returns (EmptyResp)
+
+	@doc "清空已完成的分析历史"
+	@handler HistoryClear
+	delete /history returns (OkResp)
+
+	@doc "删除指定分析历史"
+	@handler HistoryDelete
+	delete /history/:session_id (SessionReq) returns (OkResp)
+}
+
+@server (
+	group:  export
+	prefix: /api
+)
+service VideoDNA {
+	@doc "导出 EDL、FCP7 XML、Cutmark、SRT 或 ZIP"
+	@handler Export
+	post /export (ExportReq)
+
+	@doc "导出剪映草稿目录"
+	@handler DraftExport
+	post /draft/export (DraftExportReq) returns (EmptyResp)
+}
+
+@server (
+	group:    studio
+	prefix:   /api
+	timeout:  30m
+	maxBytes: 2147483648
+)
+service VideoDNA {
+	@doc "将示例视频节奏模板应用到新视频"
+	@handler TemplateApply
+	post /template/apply (AnalyzeReq) returns (EmptyResp)
+
+	@doc "将内置节奏模板应用到新视频"
+	@handler AiApply
+	post /ai/apply (AnalyzeReq) returns (EmptyResp)
+
+	@doc "获取内置节奏模板"
+	@handler AiTemplates
+	get /ai/templates returns (TemplateListResp)
+
+	@doc "生成短视频分镜"
+	@handler AiStoryboard
+	post /ai/storyboard (StoryboardReq) returns (EmptyResp)
+
+	@doc "根据分析结果推荐 BGM"
+	@handler AiBgm
+	post /ai/bgm (DnaSessionReq) returns (EmptyResp)
+}
+
+@server (
+	group:    components
+	prefix:   /api
+	maxBytes: 52428800
+)
+service VideoDNA {
+	@doc "获取模型、组件、技能和插件"
+	@handler Components
+	get /components returns (EmptyResp)
+
+	@doc "启用或关闭分析组件"
+	@handler ComponentToggle
+	post /components/:component_id/toggle (ComponentToggleReq) returns (EmptyResp)
+
+	@doc "创建自定义 AI 模型"
+	@handler ModelCreate
+	post /models (ModelReq) returns (EmptyResp)
+
+	@doc "更新自定义 AI 模型"
+	@handler ModelUpdate
+	put /models/:model_id (ModelReq) returns (EmptyResp)
+
+	@doc "删除自定义 AI 模型"
+	@handler ModelDelete
+	delete /models/:model_id (ModelPathReq) returns (OkResp)
+
+	@doc "测试 AI 模型连通性"
+	@handler ModelTest
+	post /models/:model_id/test (ModelPathReq) returns (EmptyResp)
+
+	@doc "创建自定义技能"
+	@handler SkillCreate
+	post /skills (SkillReq) returns (EmptyResp)
+
+	@doc "删除自定义技能"
+	@handler SkillDelete
+	delete /skills/:skill_id (SkillPathReq) returns (OkResp)
+
+	@doc "对指定分析结果运行技能"
+	@handler SkillRun
+	post /skills/:skill_id/run (SkillRunReq) returns (EmptyResp)
+
+	@doc "获取插件列表"
+	@handler Plugins
+	get /plugins returns (EmptyResp)
+
+	@doc "安装受信任的可执行插件 ZIP"
+	@handler PluginInstall
+	post /plugins/install returns (EmptyResp)
+
+	@doc "删除用户安装的插件"
+	@handler PluginDelete
+	delete /plugins/:plugin_id (PluginPathReq) returns (OkResp)
+}
+
+// ── 请求体 / 响应体 ───────────────────────────────────────────────────────────
+type (
+	// AnalyzeReq 视频分析选项；视频文件从 multipart file 字段读取
+	AnalyzeReq {
+		Detector  string `form:"detector,optional"` // 镜头检测器：content 或 adaptive
+		Backend   string `form:"backend,optional"` // 描述后端：auto/openai/qwen/heuristic
+		SessionId string `form:"session_id,optional"` // 可选自定义会话 ID
+	}
+	// SessionReq 会话路径参数
+	SessionReq {
+		SessionId string `path:"session_id"` // 分析会话 ID
+	}
+	// SessionFrameReq 关键帧路径参数
+	SessionFrameReq {
+		SessionId string `path:"session_id"` // 分析会话 ID
+		Filename  string `path:"filename"` // 关键帧文件名
+	}
+)
+
+type (
+	// ExportReq 导出请求；实际 DNA 字段由导出 handler 按原始 JSON 读取
+	ExportReq {
+		Format string `form:"fmt,optional"` // 格式：edl/fcp7xml/cutmark/srt/all
+	}
+	// DraftExportReq 剪映草稿导出请求
+	DraftExportReq {
+		SessionId   string    `json:"session_id"` // 分析会话 ID
+		ProjectName string    `json:"project_name,optional"` // 工程名称
+		DownloadDir string    `json:"download_dir,optional"` // 自定义输出目录
+		Cuts        []CutItem `json:"cuts"` // 剪辑区间
+	}
+)
+
+type (
+	// StoryboardReq AI 分镜生成请求
+	StoryboardReq {
+		Topic  string `json:"topic"` // 主题或文案
+		Length int64  `json:"length,optional"` // 镜头数量，范围 3-20
+	}
+	// DnaSessionReq DNA 或会话请求；动态 DNA 由 handler 读取原始 JSON
+	DnaSessionReq {
+		SessionId string `json:"session_id,optional"` // 分析会话 ID
+	}
+)
+
+type (
+	// ComponentToggleReq 组件开关请求
+	ComponentToggleReq {
+		ComponentId string `path:"component_id"` // 组件 ID
+		Enabled     bool   `json:"enabled"` // 是否启用
+		ModelId     string `json:"model_id,optional"` // 绑定模型 ID
+	}
+	// ModelReq AI 模型配置请求
+	ModelReq {
+		ModelId  string `path:"model_id,optional" json:"id,optional"` // 模型 ID
+		Name     string `json:"name"` // 展示名称
+		Kind     string `json:"kind"` // 类型：vision 或 chat
+		Provider string `json:"provider"` // 提供方：openai/dashscope/ollama/custom
+		BaseUrl  string `json:"base_url"` // OpenAI 兼容接口根地址
+		Model    string `json:"model"` // 模型名称
+		ApiKey   string `json:"api_key,optional"` // API Key；更新时留空表示保留旧值
+	}
+	// ModelPathReq 模型路径参数
+	ModelPathReq {
+		ModelId string `path:"model_id"` // 模型 ID
+	}
+	// SkillReq 自定义技能请求
+	SkillReq {
+		Id     string `json:"id,optional"` // 技能 ID
+		Name   string `json:"name"` // 技能名称
+		Desc   string `json:"desc,optional"` // 技能说明
+		Prompt string `json:"prompt"` // 提示词模板
+	}
+	// SkillPathReq 技能路径参数
+	SkillPathReq {
+		SkillId string `path:"skill_id"` // 技能 ID
+	}
+	// SkillRunReq 技能执行请求；动态 DNA 由 handler 读取原始 JSON
+	SkillRunReq {
+		SkillId   string `path:"skill_id"` // 技能 ID
+		SessionId string `json:"session_id,optional"` // 分析会话 ID
+	}
+	// PluginPathReq 插件路径参数
+	PluginPathReq {
+		PluginId string `path:"plugin_id"` // 插件 ID
+	}
+)

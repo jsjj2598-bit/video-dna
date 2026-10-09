@@ -1,0 +1,82 @@
+name: Build Installers
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: go test ./...
+      - run: npm ci --ignore-scripts
+      - run: npm run package:win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-win
+          path: |
+            dist/Video DNA Analyzer Setup *.exe
+            dist/Video DNA Analyzer *.exe
+
+  macos-arm64:
+    name: macOS arm64 installer
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run prepare:tools
+      - run: npm run build:backend
+      - run: npx electron-builder --mac --arm64 --config electron/builder.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-mac-arm64
+          path: |
+            dist/*.dmg
+            dist/*.zip
+
+  macos-x64:
+    name: macOS x64 installer
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run prepare:tools
+      - run: npm run build:backend
+      - run: npx electron-builder --mac --x64 --config electron/builder.yml
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installers-mac-x64
+          path: |
+            dist/*.dmg
+            dist/*.zip
